@@ -38,11 +38,12 @@ __all__ = [
     'print_imported',
     'std_name',
     'to_list',
+    'smoke_test',
     'test',
 ]
 
 
-def test(path, separator=DEFAULT_SEPARATOR, encoding=DEFAULT_ENCODING):
+def smoke_test(path, separator=DEFAULT_SEPARATOR, encoding=DEFAULT_ENCODING):
     """Load a lexical network and print all tables."""
     ln = load(path=path, separator=separator, encoding=encoding)
 
@@ -55,13 +56,18 @@ def test(path, separator=DEFAULT_SEPARATOR, encoding=DEFAULT_ENCODING):
     return ln
 
 
+def test(path, separator=DEFAULT_SEPARATOR, encoding=DEFAULT_ENCODING):
+    """Backward-compatible alias for smoke_test()."""
+    return smoke_test(path=path, separator=separator, encoding=encoding)
+
+
 if __name__ == '__main__':
     print('\x1b[0;31mRunning in test mode\x1b[0m')
 
-    parser = argparse.ArgumentParser(description='Create dataframes from a lexical network.')
+    parser = argparse.ArgumentParser(description='Run a smoke test for lexical network loading.')
     parser.add_argument('-d', '--data', required=True, help='Path to the data folder')
     parser.add_argument('-s', '--separator', default=DEFAULT_SEPARATOR, help='CSV separator')
     parser.add_argument('-e', '--encoding', default=DEFAULT_ENCODING, help='character encoding')
     args = parser.parse_args()
 
-    test(path=args.data, separator=args.separator, encoding=args.encoding)
+    smoke_test(path=args.data, separator=args.separator, encoding=args.encoding)

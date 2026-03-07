@@ -20,7 +20,7 @@ class LexicalUnit:
         self.id = node_id
         self.ln = ln
         self.data = ln['nodes'].loc[node_id]
-
+        self.features = ln['features'][ln['features'].node_id == node_id]
 
 class LexicalEntry:
     """A lexical entry is a group of lexical units (copolysemes)."""
@@ -29,8 +29,7 @@ class LexicalEntry:
         self.id = entry_id
         self.ln = ln
         self.data = ln['entries'].loc[entry_id]
-        self.lus = ln['nodes'][ln['nodes'].entry_id == entry_id]
-
+        self.senses = ln['nodes'][ln['nodes'].entry_id == entry_id]
 
 class GrammaticalFeature:
     """Grammatical features for lexical units."""
@@ -39,3 +38,43 @@ class GrammaticalFeature:
         self.id = feature_id
         self.ln = ln
         self.data = ln['feature_names'].loc[feature_id]
+
+class SemanticLabel:
+    """Semantic labels for lexical units."""
+
+    def __init__(self, label_id, ln):
+        self.id = label_id
+        self.ln = ln
+        self.data = ln['label_names'].loc[label_id]
+
+class PropositionalForm:
+    """Propositional forms for lexical units."""
+
+    def __init__(self, form_id, ln):
+        self.id = form_id
+        self.ln = ln
+        self.data = ln['propforms'].loc[form_id]
+
+class Definition:
+    """Definitions for lexical units."""
+
+    def __init__(self, node_id, ln):
+        self.id = node_id
+        self.ln = ln
+        self.data = ln['definitions'][ln['definitions'].node_id == node_id]
+
+class LexicalFunction:
+    """Lexical functions."""
+
+    def __init__(self, lf_id, ln):
+        self.id = lf_id
+        self.ln = ln
+        self.data = ln['lf_names'][ln['lf_names'].lf_id == lf_id]
+
+class Example:
+    """Examples for lexical units."""
+
+    def __init__(self, node_id, ln):
+        self.id = node_id
+        self.ln = ln
+        self.data = ln['examples'][ln['examples'].node_id == node_id]

@@ -1,4 +1,139 @@
-"""Import data from a Lexical Network into pandas dataframes."""
+"""
+Imports the data from a Lexical Network into the following pandas dataframes:
+
+
+Nodes
+=======================================
+A node in the network represents a lexical unit.
+
+file   : 01-lsnodes.csv
+columns: id,      entry,    lexnum, status,      %,      update_date,      update_time,      lexname
+renamed: node_id, entry_id, lexnum, node_status, node_%, node_update_date, node_update_time, lexname
+index  : node_id
+
+
+Entries
+=======================================
+Nodes are grouped into lexical entries.
+
+file   : 02-lsentries.csv
+columns: id,       addtoname, name,       subscript, superscript, status,       %
+renamed: entry_id, addtoname, entry_name, subscript, superscript, entry_status, entry_%
+index  : entry_id
+
+
+Copolysemy relations
+=======================================
+Nodes of an entry are linked by copolysemy relations.
+
+file   : 04-lscopolysemy-rel.csv
+columns: source,    target,    type,    subtype
+renamed: cp_source, cp_target, cp_type, cp_subtype
+index  : default
+
+
+Grammatical features
+=======================================
+Part of speech, gender, etc., for each node.
+
+file   : '06-lsgramcharac-rel.csv'
+columns: node,    usagenote, usagenotevars, POS, phraseolstruc, embeddedlex, othercharac, othercharacvars
+renamed: node_id, usage,     usagevars,     POS, ph_str,        embeddedlex, features,    featuresvars
+index  : node_id
+
+
+Wordforms
+=======================================
+Inflected forms for each node.
+
+file   : '08-lswordforms.csv'
+columns: node,    features, signifier
+renamed: node_id, features, signifier
+index  : node_id
+
+
+Semantic labels
+=======================================
+Semantic labels for the nodes.
+
+file   : '10-lssemlabel-rel.csv'
+columns: node,    label %
+renamed: node_id, label, label_%
+index  : node_id
+
+
+Propositional forms
+=======================================
+Propositional forms for the nodes.
+
+file   : '11-lspropform-rel.csv'
+columns: node,    propform, tildevalue, %,               actantslist
+renamed: node_id, propform, tildevalue, propform_confid, actants
+index  : node_id
+
+
+Lexical functions
+=======================================
+Lexical functions for the nodes.
+
+file   : '15-lslf-rel.csv'
+columns: source,    lf, target,    form, separator, merged, syntacticframe, constraint, position
+renamed: source_id, lf_id, target_id, form, separator, merged, frame,          constraint, position
+index  : default
+
+
+Definitions
+=======================================
+Definitions for the nodes.
+
+file   : '13-lsdef.csv'
+columns: node,    def_XML, def_HTML
+renamed: node_id, def_XML, def_HTML
+index  : node_id
+
+
+Feature names
+=======================================
+Grammatical feature names from XML.
+
+file   : '05-lsgramcharac-model.xml'
+columns: id,      name
+renamed: feature_id, name
+index  : feature_id
+
+
+LF names
+=======================================
+Lexical function names from XML.
+
+file   : '14-lslf-model.xml'
+columns: id,    name,    linktype
+renamed: lf_id, lf_name, type
+index  : lf_id
+
+
+Examples
+=======================================
+Examples linked to lexical units.
+
+file   : '17-lsex.csv'
+columns: id,    source, status, content, title, authors, location, date
+renamed: ex_id, source, status, content, title, authors, location, date
+index  : ex_id
+
+
+Example relations
+=======================================
+Link table from lexical units to examples.
+
+file   : '18-lsex-rel.csv'
+columns: node,    ex,    occurrence, position, %
+renamed: node_id, ex_id, occurrence, position, %
+index  : default
+
+
+TODO: should we use IDs as row index? (cf. pos_names in load_pos_feature_names())
+"""
 
 import pandas as pd
 import xml.etree.ElementTree as ET
