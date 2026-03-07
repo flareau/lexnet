@@ -1,3 +1,5 @@
+# Import data from a Lexical Network into pandas dataframes
+
 """
 Imports the data from a Lexical Network into the following pandas dataframes:
 
@@ -101,9 +103,9 @@ TODO: should we use IDs as row index? (cf. pos_names in load_pos_feature_names()
 
 import argparse
 import pandas as pd
-from pandas import *
 import xml.etree.ElementTree as ET
 import re
+from pathlib import Path
 
 DEFAULT_SEPARATOR = '\t'
 DEFAULT_ENCODING = 'utf8'
@@ -147,14 +149,14 @@ def print_imported(data, file, items=None):
         items = 'items'
     print(f"Imported {len(data)} {items} from {file}")
 
-def load_csv(file, path, columns=DEFAULT_COLUMNS, separator=DEFAULT_SEPARATOR, encoding=DEFAULT_ENCODING):
-    data = pd.read_csv('/'.join([path, file]), sep=separator, encoding=encoding, header=0, names=columns)
+def load_csv(file, path, columns=None, separator=DEFAULT_SEPARATOR, encoding=DEFAULT_ENCODING):
+    data = pd.read_csv(Path(path) / file, sep=separator, encoding=encoding, header=0, names=columns)
     print_imported(data, file)
     return data
 
 def load_xml(file, path, encoding=DEFAULT_ENCODING):
     # ET.parse() doesn't encoding specification
-    with open('/'.join([path, file]), 'r', encoding=encoding) as f:
+    with open(Path(path) / file, 'r', encoding=encoding) as f:
         xml = ET.fromstring(f.read())
     return xml
 
@@ -205,7 +207,7 @@ def to_list(text):
     else:
         return []
 
-def load(path, sources=DEFAULT_DATA_SOURCES, columns=DEFAULT_COLUMNS, separator=DEFAULT_SEPARATOR, encoding=DEFAULT_ENCODING):
+def load(path, sources=None, columns=None, separator=DEFAULT_SEPARATOR, encoding=DEFAULT_ENCODING):
     """
     Loads csv files for a lexical network into pandas dataframes.
     Parameters
@@ -217,6 +219,11 @@ def load(path, sources=DEFAULT_DATA_SOURCES, columns=DEFAULT_COLUMNS, separator=
     Returns
         dict:   table names with their corresponding dataframe
     """
+
+    if sources is None:
+        sources = DEFAULT_DATA_SOURCES.copy()
+    if columns is None:
+        columns = {k: v.copy() for k, v in DEFAULT_COLUMNS.items()}
 
     # Import data
     print(f'\x1b[0;34mImporting data from {path}\x1b[0m')
@@ -266,6 +273,45 @@ def test(path, separator, encoding):
         print()
 
     return ln
+
+# Classes
+
+class LexicalNetwork:
+    """Main class for a lexical network."""
+    
+    def __init__(self, path, separator=DEFAULT_SEPARATOR, encoding=DEFAULT_ENCODING):
+        self.path = path
+        self.separator = separator
+        self.encoding = encoding
+        self.data = load(path=path, separator=separator, encoding=encoding)
+
+class LexicalUnit:
+    """Class for a lexical unit (node in the network)."""
+    
+    def __init__(self, node_id, ln):
+        self.id = node_id
+        self.ln = ln
+        self.data = ln['nodes'].loc[node_id]
+
+class LexicalEntry:
+    """A lexical entry is a group of lexical units (copolysemes)."""
+    
+    def __init__(self, entry_id, ln):
+        self.id = entry_id
+        self.ln = ln
+        self.data = ln['entries'].loc[entry_id]
+        self.lus = ln['nodes'][ln['nodes'].entry_id == entry_id]
+
+class GrammaticalFeature:
+    """Grammatical features for lexical units."""
+
+    def __init__(self, feature_id, ln):
+        self.id = feature_id
+        self.ln = ln
+        self.data = ln['feature_names'].loc[feature_id]
+
+
+# CLI execution
 
 if __name__ == '__main__':
 
