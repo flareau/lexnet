@@ -55,12 +55,6 @@ def smoke_test(path, separator=DEFAULT_SEPARATOR, encoding=DEFAULT_ENCODING):
 
     return ln
 
-
-def test(path, separator=DEFAULT_SEPARATOR, encoding=DEFAULT_ENCODING):
-    """Backward-compatible alias for smoke_test()."""
-    return smoke_test(path=path, separator=separator, encoding=encoding)
-
-
 if __name__ == '__main__':
     print('\x1b[0;31mRunning in test mode\x1b[0m')
 
