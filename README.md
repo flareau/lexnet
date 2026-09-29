@@ -41,6 +41,19 @@ Optional flags:
 - `-s` / `--separator` (default: tab)
 - `-e` / `--encoding` (default: `utf8`)
 
+## Desktop Explorer
+
+Launch the lightweight read-only browser GUI with a data path:
+
+```bash
+python explorer.py /path/to/data
+```
+
+The explorer opens a private local URL in your default browser. It supports
+word and inflected-form lookup, lexical-function searches, and filtering
+lexical entries by grammatical feature. Press Ctrl-C in the terminal to stop
+it.
+
 ## Tests
 
 Run all tests:
