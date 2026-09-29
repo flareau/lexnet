@@ -37,8 +37,8 @@ class TestLexnetQueries(unittest.TestCase):
                 {'label_id': 'sl1', 'name': 'Label One'},
             ]).set_index('label_id'),
             'lf_names': pd.DataFrame([
-                {'lf_id': 'lf1', 'lf_name': 'Magn', 'type': 'standard'},
-                {'lf_id': 'lf2', 'lf_name': 'Oper1', 'type': 'standard'},
+                {'lf_id': 'lf1', 'lf_name': 'Magn', 'type': 'standard', 'family_id': 'fam1', 'family_name': 'Intensity', 'group_index': 1, 'family_index': 1, 'lf_index': 1},
+                {'lf_id': 'lf2', 'lf_name': 'Oper1', 'type': 'standard', 'family_id': 'fam2', 'family_name': 'Support verbs', 'group_index': 2, 'family_index': 1, 'lf_index': 1},
             ]).set_index('lf_id'),
             'lfs': pd.DataFrame([
                 {'source_id': 'n1', 'lf_id': 'lf1', 'target_id': 'n2', 'form': '', 'frame': '', 'constraint': ''},
@@ -71,6 +71,14 @@ class TestLexnetQueries(unittest.TestCase):
         result = self.queries.search_lexical_functions('Magn, Oper1')
         self.assertEqual(set(result.lf_name), {'Magn', 'Oper1'})
         self.assertEqual(set(result.source_name), {'chat I', 'prendre le large'})
+
+    def test_lexical_function_hierarchy_clusters_families_by_group(self):
+        hierarchy = self.queries.lexical_function_hierarchy()
+        self.assertEqual([group['index'] for group in hierarchy], [1, 2])
+        self.assertEqual(hierarchy[0]['families'][0]['name'], 'Intensity')
+        self.assertEqual(hierarchy[0]['families'][0]['functions'][0]['name'], 'Magn')
+        self.assertEqual(self.queries.lexical_function_ids_for_family('fam2'), ['lf2'])
+        self.assertEqual(self.queries.lexical_function_ids_for_group(1), ['lf1'])
 
     def test_feature_search_supports_any_and_all(self):
         any_result = self.queries.search_features('idiom, noun')
@@ -120,6 +128,10 @@ class TestLexnetQueries(unittest.TestCase):
                 page = response.read().decode('utf-8')
             with urlopen(base_url + '/api/search?kind=word&q=chat&mode=exact&forms=1') as response:
                 payload = json.load(response)
+            with urlopen(base_url + '/api/search?kind=lf&family_id=fam1') as response:
+                family_payload = json.load(response)
+            with urlopen(base_url + '/api/search?kind=lf&family_id=group%3A2') as response:
+                group_payload = json.load(response)
             with urlopen(base_url + '/api/inspect?type=node&id=n3') as response:
                 node_payload = json.load(response)
             with urlopen(base_url + '/api/inspect?type=entry&id=e1') as response:
@@ -135,7 +147,12 @@ class TestLexnetQueries(unittest.TestCase):
         self.assertIn("key === 'source_name' || key === 'target_name' || (key === 'form' && row.form)", page)
         self.assertIn("row.source_id : row.target_id", page)
         self.assertIn("(key === 'entry_name' || key === 'std_name')", page)
+        self.assertIn("className='tree-select-item tree-select-group'", page)
+        self.assertIn("chooseFamily(`group:${group.index}`, `Group ${group.index}`)", page)
+        self.assertIn("className='tree-select-item tree-select-family'", page)
         self.assertEqual({row['node_id'] for row in payload['rows']}, {'n1', 'n2'})
+        self.assertEqual([row['lf_name'] for row in family_payload['rows']], ['Magn'])
+        self.assertEqual([row['lf_name'] for row in group_payload['rows']], ['Oper1'])
         self.assertEqual(node_payload['links'][-1]['item_id'], 'n1')
         self.assertEqual(entry_payload['title'], 'Lexical entry')
 

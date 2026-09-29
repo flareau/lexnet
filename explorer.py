@@ -74,7 +74,8 @@ class LexnetQueries:
         self.node_names = self.nodes['std_name'].fillna('').astype(str).to_dict()
         self.entry_names = self.entries['entry_name'].fillna('').astype(str).to_dict()
         self.node_entries = self.nodes['entry_id'].to_dict()
-        self.lf_names = data['lf_names']['lf_name'].fillna('').astype(str).to_dict()
+        self.lf_table = data['lf_names']
+        self.lf_names = self.lf_table['lf_name'].fillna('').astype(str).to_dict()
         self.feature_names = data['feature_names']['name'].fillna('').astype(str).to_dict()
         self.form_names = self._name_map(data.get('form_names'))
         self.label_names = self._name_map(data.get('label_names'))
@@ -147,6 +148,11 @@ class LexnetQueries:
     def search_lexical_functions(self, names: str | Iterable[str]) -> pd.DataFrame:
         """Return source/target occurrences for one or more LF names."""
         lf_ids = self._resolve_names(split_query(names), self.lf_names)
+        return self.search_lexical_function_ids(lf_ids)
+
+    def search_lexical_function_ids(self, lf_ids: Iterable) -> pd.DataFrame:
+        """Return source/target occurrences for LF IDs."""
+        lf_ids = set(lf_ids)
         relations = self.data.get('lfs')
         if not lf_ids or relations is None or relations.empty:
             return pd.DataFrame(columns=EMPTY_LF_RESULTS)
@@ -169,6 +175,38 @@ class LexnetQueries:
             ['lf_name', 'source_name', 'target_name'],
             key=lambda col: col.astype(str).str.casefold(),
         ).reset_index(drop=True)
+
+    def lexical_function_ids_for_family(self, family_id) -> list:
+        """Return LF IDs belonging to a family, preserving XML order."""
+        if 'family_id' not in self.lf_table:
+            return []
+        return self.lf_table.index[self.lf_table['family_id'] == family_id].tolist()
+
+    def lexical_function_ids_for_group(self, group_index: int) -> list:
+        """Return LF IDs belonging to a group, preserving XML order."""
+        if 'group_index' not in self.lf_table:
+            return []
+        return self.lf_table.index[self.lf_table['group_index'] == group_index].tolist()
+
+    def lexical_function_hierarchy(self) -> list[dict]:
+        """Return groups containing families containing lexical functions."""
+        required = {'group_index', 'family_id', 'family_name'}
+        if not required.issubset(self.lf_table.columns):
+            return []
+        groups = []
+        for group_index, group_rows in self.lf_table.groupby('group_index', sort=True):
+            families = []
+            for family_id, family_rows in group_rows.groupby('family_id', sort=False):
+                families.append({
+                    'id': _text(family_id),
+                    'name': _text(family_rows.iloc[0]['family_name']),
+                    'functions': [
+                        {'id': _text(lf_id), 'name': _text(row['lf_name'])}
+                        for lf_id, row in family_rows.iterrows()
+                    ],
+                })
+            groups.append({'index': int(group_index), 'families': families})
+        return groups
 
     def search_features(
         self, names: str | Iterable[str], require_all: bool = False
@@ -440,6 +478,15 @@ main { height: calc(100vh - 58px); padding: 16px; display: grid; grid-template-c
 input[type=text] { flex: 1; min-width: 210px; padding: 8px 10px; border: 1px solid #aeb9c4; border-radius: 5px; font: inherit; }
 select, button.search { padding: 8px 11px; border: 1px solid #97a6b4; border-radius: 5px; background: white; font: inherit; }
 button.search { background: #0878ba; border-color: #0878ba; color: white; cursor: pointer; font-weight: 600; }
+.tree-select { position: relative; min-width: 220px; }
+.tree-select-toggle { width: 100%; padding: 8px 28px 8px 11px; border: 1px solid #97a6b4; border-radius: 5px; background: white; color: #17212b; font: inherit; text-align: left; cursor: pointer; position: relative; }
+.tree-select-toggle::after { content: '▾'; position: absolute; right: 9px; color: #536475; }
+.tree-select-menu { position: absolute; z-index: 20; top: calc(100% + 3px); left: 0; min-width: 100%; max-height: 360px; overflow-y: auto; padding: 4px 0; background: white; border: 1px solid #aeb9c4; border-radius: 5px; box-shadow: 0 5px 16px #17212b24; }
+.tree-select-menu[hidden] { display: none; }
+.tree-select-item { display: block; width: 100%; padding: 6px 12px; border: 0; background: white; color: #17212b; font: inherit; text-align: left; white-space: nowrap; cursor: pointer; }
+.tree-select-item:hover, .tree-select-item:focus { background: #edf6fc; outline: none; }
+.tree-select-group { color: #6d7882; font-weight: 600; background: #f3f5f7; }
+.tree-select-family { padding-left: 28px; }
 .options { margin-top: 9px; display: flex; gap: 18px; font-size: 14px; }
 .status { padding: 8px 14px; color: #536475; background: #f7f9fa; border-bottom: 1px solid #d8dee5; font-size: 13px; }
 .table-wrap { overflow: auto; flex: 1; }
@@ -470,7 +517,15 @@ pre { flex: 1; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; m
       <label class="options"><span><input type="checkbox" name="forms" checked> Include inflected forms</span></label>
     </form>
     <form class="panel" id="lf-panel" data-kind="lf">
-      <div class="controls"><input type="text" name="q" list="lf-names" placeholder="Magn, Oper1, …"><datalist id="lf-names"></datalist><button class="search">Search</button></div>
+      <div class="controls">
+        <div class="tree-select" id="lf-family">
+          <button type="button" class="tree-select-toggle" aria-haspopup="listbox" aria-expanded="false">Choose a family…</button>
+          <div class="tree-select-menu" role="listbox" hidden></div>
+          <input type="hidden" name="family_id" value="">
+        </div>
+        <select name="lf_id" id="lf-function" disabled><option value="">Choose a family first</option></select>
+      </div>
+      <div class="controls" style="margin-top: 8px"><input type="text" name="q" list="lf-names" placeholder="Or enter LF names: Magn, Oper1, …"><datalist id="lf-names"></datalist><button class="search">Search</button></div>
     </form>
     <form class="panel" id="feature-panel" data-kind="feature">
       <div class="controls"><input type="text" name="q" list="feature-names" placeholder="locution forte, …"><datalist id="feature-names"></datalist><button class="search">Search</button></div>
@@ -605,6 +660,47 @@ async function initialize() {
   for (const [target, values] of [['lf-names', meta.lexical_functions], ['feature-names', meta.features]]) {
     const list=document.querySelector('#'+target); for (const value of values) { const option=document.createElement('option'); option.value=value; list.append(option); }
   }
+  const familyControl = document.querySelector('#lf-family');
+  const familyToggle = familyControl.querySelector('.tree-select-toggle');
+  const familyMenu = familyControl.querySelector('.tree-select-menu');
+  const familyValue = familyControl.querySelector('input[name=family_id]');
+  const functionSelect = document.querySelector('#lf-function');
+  const nameInput = document.querySelector('#lf-panel input[name=q]');
+  function chooseFamily(value, label, clearName=true) {
+    familyValue.value=value; familyToggle.textContent=label;
+    familyMenu.hidden=true; familyToggle.setAttribute('aria-expanded', 'false');
+    if (clearName) nameInput.value='';
+    if (value.startsWith('group:')) {
+      const groupNumber=value.slice(6);
+      functionSelect.replaceChildren();
+      const all=document.createElement('option'); all.value=''; all.textContent=`All functions in Group ${groupNumber}`; functionSelect.append(all);
+      functionSelect.disabled=true;
+      return;
+    }
+    const family = meta.lf_hierarchy.flatMap(group => group.families).find(item => item.id === value);
+    functionSelect.replaceChildren();
+    const all=document.createElement('option'); all.value=''; all.textContent=family ? 'All functions in family' : 'Choose a family first'; functionSelect.append(all);
+    for (const lf of family?.functions || []) { const option=document.createElement('option'); option.value=lf.id; option.textContent=lf.name; functionSelect.append(option); }
+    functionSelect.disabled = !family;
+  }
+  for (const group of meta.lf_hierarchy) {
+    const groupItem=document.createElement('button'); groupItem.type='button'; groupItem.className='tree-select-item tree-select-group'; groupItem.setAttribute('role', 'option'); groupItem.textContent=`Group ${group.index}`;
+    groupItem.addEventListener('click', () => chooseFamily(`group:${group.index}`, `Group ${group.index}`)); familyMenu.append(groupItem);
+    for (const family of group.families) {
+      const familyItem=document.createElement('button'); familyItem.type='button'; familyItem.className='tree-select-item tree-select-family'; familyItem.setAttribute('role', 'option'); familyItem.textContent=family.name;
+      familyItem.addEventListener('click', () => chooseFamily(family.id, family.name)); familyMenu.append(familyItem);
+    }
+  }
+  familyToggle.addEventListener('click', () => {
+    familyMenu.hidden=!familyMenu.hidden;
+    familyToggle.setAttribute('aria-expanded', String(!familyMenu.hidden));
+  });
+  document.addEventListener('click', event => { if (!familyControl.contains(event.target)) { familyMenu.hidden=true; familyToggle.setAttribute('aria-expanded', 'false'); } });
+  functionSelect.addEventListener('change', () => { nameInput.value = ''; });
+  nameInput.addEventListener('input', () => {
+    if (!nameInput.value) return;
+    chooseFamily('', 'Choose a family…', false);
+  });
 }
 document.querySelectorAll('.tab').forEach(x => x.addEventListener('click', () => selectTab(x.dataset.kind)));
 document.querySelectorAll('form').forEach(x => x.addEventListener('submit', search));
@@ -640,6 +736,7 @@ def create_server(
                         'entries': len(queries.entries),
                         'units': len(queries.nodes),
                         'lexical_functions': sorted(set(queries.lf_names.values()), key=str.casefold),
+                        'lf_hierarchy': queries.lexical_function_hierarchy(),
                         'features': sorted(set(queries.feature_names.values()), key=str.casefold),
                     })
                 if request.path == '/api/inspect':
@@ -666,7 +763,20 @@ def create_server(
                 count = result.entry_id.nunique()
                 summary = f'{len(result):,} lexical units in {count:,} entries.'
             elif kind == 'lf':
-                result = queries.search_lexical_functions(query)
+                lf_id = self._param(params, 'lf_id')
+                family_id = self._param(params, 'family_id')
+                if query:
+                    result = queries.search_lexical_functions(query)
+                elif lf_id:
+                    result = queries.search_lexical_function_ids([lf_id])
+                elif family_id.startswith('group:'):
+                    result = queries.search_lexical_function_ids(
+                        queries.lexical_function_ids_for_group(int(family_id.removeprefix('group:')))
+                    )
+                else:
+                    result = queries.search_lexical_function_ids(
+                        queries.lexical_function_ids_for_family(family_id)
+                    )
                 summary = f'{len(result):,} lexical-function relations.'
             elif kind == 'feature':
                 result = queries.search_features(

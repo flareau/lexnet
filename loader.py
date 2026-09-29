@@ -227,11 +227,21 @@ def load_label_names(file, path, encoding=DEFAULT_ENCODING):
 
 def load_lf_names(file, path, encoding=DEFAULT_ENCODING):
     xml = load_xml(file=file, path=path, encoding=encoding)
-    tags = xml.findall('group/family/lexicalfunction')
-    lf_names = pd.DataFrame([
-        {'lf_id': tag.get('id'), 'lf_name': tag.get('name'), 'type': tag.get('linktype')}
-        for tag in tags
-    ])
+    rows = []
+    for group_index, group in enumerate(xml.findall('group'), start=1):
+        for family_index, family in enumerate(group.findall('family'), start=1):
+            for lf_index, tag in enumerate(family.findall('lexicalfunction'), start=1):
+                rows.append({
+                    'lf_id': tag.get('id'),
+                    'lf_name': tag.get('name'),
+                    'type': tag.get('linktype'),
+                    'family_id': family.get('id'),
+                    'family_name': family.get('name'),
+                    'group_index': group_index,
+                    'family_index': family_index,
+                    'lf_index': lf_index,
+                })
+    lf_names = pd.DataFrame(rows)
     print_imported(lf_names, file)
     return lf_names
 
