@@ -243,22 +243,10 @@ class LexnetQueries:
         self._append_simple_rows(lines, 'SEMANTIC LABELS', self.data.get('labels'), node_id, ['label'])
         self._append_simple_rows(lines, 'PROPOSITIONAL FORMS', self.data.get('propforms'), node_id, ['propform'])
 
-        relations = self.data.get('lfs')
-        if relations is not None and not relations.empty:
-            outgoing = relations[relations['source_id'] == node_id]
-            incoming = relations[relations['target_id'] == node_id]
-            if not outgoing.empty or not incoming.empty:
-                lines.extend(['', 'LEXICAL FUNCTIONS'])
-                for _, row in outgoing.iterrows():
-                    lines.append(
-                        f" → {self.lf_names.get(row['lf_id'], row['lf_id'])}: "
-                        f"{self.node_names.get(row['target_id'], row['target_id'])}"
-                    )
-                for _, row in incoming.iterrows():
-                    lines.append(
-                        f" ← {self.lf_names.get(row['lf_id'], row['lf_id'])}: "
-                        f"{self.node_names.get(row['source_id'], row['source_id'])}"
-                    )
+        relation_links = self.lexical_function_links(node_id)
+        if relation_links:
+            lines.extend(['', 'LEXICAL FUNCTIONS'])
+            lines.extend(link['line'] for link in relation_links)
 
         ex_rel = self.data.get('ex-rel')
         examples = self.data.get('examples')
@@ -271,6 +259,30 @@ class LexnetQueries:
                     content = re.sub(r'<[^>]+>', ' ', html.unescape(_text(row.get('content'))))
                     lines.append(' • ' + re.sub(r'\s+', ' ', content).strip())
         return '\n'.join(lines)
+
+    def lexical_function_links(self, node_id) -> list[dict[str, str]]:
+        """Return display text and navigation targets for a unit's LF relations."""
+        relations = self.data.get('lfs')
+        if relations is None or relations.empty:
+            return []
+        links = []
+        outgoing = relations[relations['source_id'] == node_id]
+        incoming = relations[relations['target_id'] == node_id]
+        for _, row in outgoing.iterrows():
+            name = self.node_names.get(row['target_id'], _text(row['target_id']))
+            prefix = f" → {self.lf_names.get(row['lf_id'], row['lf_id'])}: "
+            links.append({
+                'line': prefix + name, 'prefix': prefix,
+                'node_id': _text(row['target_id']), 'node_name': name,
+            })
+        for _, row in incoming.iterrows():
+            name = self.node_names.get(row['source_id'], _text(row['source_id']))
+            prefix = f" ← {self.lf_names.get(row['lf_id'], row['lf_id'])}: "
+            links.append({
+                'line': prefix + name, 'prefix': prefix,
+                'node_id': _text(row['source_id']), 'node_name': name,
+            })
+        return links
 
     @staticmethod
     def _append_simple_rows(lines, title, frame, node_id, columns):
@@ -316,10 +328,12 @@ button.search { background: #0878ba; border-color: #0878ba; color: white; cursor
 .status { padding: 8px 14px; color: #536475; background: #f7f9fa; border-bottom: 1px solid #d8dee5; font-size: 13px; }
 .table-wrap { overflow: auto; flex: 1; }
 table { width: 100%; border-collapse: collapse; font-size: 14px; }
-th { position: sticky; top: 0; background: #f0f3f6; text-align: left; padding: 8px 10px; border-bottom: 1px solid #cbd3db; }
+th { position: sticky; top: 0; background: #f0f3f6; text-align: left; padding: 8px 10px; border-bottom: 1px solid #cbd3db; cursor: pointer; user-select: none; }
+th:hover, th:focus { background: #e3e9ee; outline: none; }
 td { padding: 8px 10px; border-bottom: 1px solid #e7ebef; max-width: 300px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-tbody tr { cursor: pointer; }
 tbody tr:hover { background: #edf6fc; }
+.node-link { padding: 0; border: 0; background: transparent; color: #0878ba; font: inherit; text-decoration: underline; cursor: pointer; }
+.node-link:hover, .node-link:focus { color: #064f79; }
 .details { display: flex; flex-direction: column; }
 .details h2 { font-size: 16px; margin: 0; padding: 14px; border-bottom: 1px solid #d8dee5; }
 pre { flex: 1; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; margin: 0; padding: 16px; font: 14px/1.5 system-ui, sans-serif; }
@@ -353,24 +367,71 @@ pre { flex: 1; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; m
 </main>
 <script>
 const columns = {
-  word: [['entry_name','Entry'], ['std_name','Lexical unit'], ['pos','POS'], ['match_source','Matched in']],
+  word: [['entry_name','Entry'], ['std_name','Lexical unit'], ['pos','POS']],
   lf: [['lf_name','Function'], ['source_name','Source'], ['target_name','Target'], ['form','Form']],
   feature: [['entry_name','Entry'], ['std_name','Lexical unit'], ['matching_features','Matching features']]
 };
 let kind = 'word';
+let currentRows = [];
+let sortKey = null;
+let sortAscending = true;
+const collator = new Intl.Collator(undefined, {numeric: true, sensitivity: 'base'});
 const status = document.querySelector('#status');
 const results = document.querySelector('#results');
 const head = document.querySelector('#head');
 
 function selectTab(next) {
   kind = next;
+  currentRows = []; sortKey = null; sortAscending = true;
   document.querySelectorAll('.tab').forEach(x => x.classList.toggle('active', x.dataset.kind === kind));
   document.querySelectorAll('.panel').forEach(x => x.classList.toggle('active', x.dataset.kind === kind));
   renderHead(); results.replaceChildren(); status.textContent = 'Ready.';
   document.querySelector(`#${kind}-panel input[name=q]`).focus();
 }
 function renderHead() {
-  head.replaceChildren(...columns[kind].map(([, label]) => { const th=document.createElement('th'); th.textContent=label; return th; }));
+  head.replaceChildren(...columns[kind].map(([key, label]) => {
+    const th=document.createElement('th');
+    th.tabIndex=0;
+    th.textContent=label + (sortKey === key ? (sortAscending ? ' ▲' : ' ▼') : '');
+    th.setAttribute('aria-sort', sortKey === key ? (sortAscending ? 'ascending' : 'descending') : 'none');
+    th.addEventListener('click', () => sortBy(key));
+    th.addEventListener('keydown', event => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); sortBy(key); } });
+    return th;
+  }));
+}
+function sortBy(key) {
+  if (sortKey === key) sortAscending = !sortAscending;
+  else { sortKey = key; sortAscending = true; }
+  currentRows.sort((left, right) => {
+    const a = String(left[key] || ''); const b = String(right[key] || '');
+    if (!a && b) return 1; if (a && !b) return -1;
+    return collator.compare(a, b) * (sortAscending ? 1 : -1);
+  });
+  renderHead(); renderRows();
+}
+function renderRows() {
+  const fragment = document.createDocumentFragment();
+  for (const row of currentRows) {
+    const tr = document.createElement('tr');
+    for (const [key] of columns[kind]) {
+      const td=document.createElement('td'); td.title=row[key] || '';
+      if ((kind === 'word' || kind === 'feature') && key === 'std_name') {
+        const link=document.createElement('button');
+        link.type='button'; link.className='node-link'; link.textContent=row[key] || '';
+        link.addEventListener('click', () => showNode(row.node_id));
+        td.append(link);
+      } else if (kind === 'lf' && (key === 'source_name' || key === 'target_name' || (key === 'form' && row.form))) {
+        const link=document.createElement('button');
+        link.type='button'; link.className='node-link'; link.textContent=row[key] || '';
+        const nodeId = key === 'source_name' ? row.source_id : row.target_id;
+        link.addEventListener('click', event => { event.stopPropagation(); showNode(nodeId); });
+        td.append(link);
+      } else td.textContent=row[key] || '';
+      tr.append(td);
+    }
+    fragment.append(tr);
+  }
+  results.replaceChildren(fragment);
 }
 async function search(event) {
   event.preventDefault();
@@ -384,20 +445,38 @@ async function search(event) {
     const payload = await response.json();
     if (!response.ok) throw new Error(payload.error || 'Search failed');
     status.textContent = payload.status;
-    const fragment = document.createDocumentFragment();
-    for (const row of payload.rows) {
-      const tr = document.createElement('tr');
-      for (const [key] of columns[form.dataset.kind]) { const td=document.createElement('td'); td.textContent=row[key] || ''; td.title=row[key] || ''; tr.append(td); }
-      tr.addEventListener('click', () => showNode(row.node_id || row.source_id));
-      fragment.append(tr);
-    }
-    results.append(fragment);
+    currentRows = payload.rows; sortKey = null; sortAscending = true;
+    renderHead(); renderRows();
   } catch (error) { status.textContent = error.message; }
 }
 async function showNode(node) {
   const response = await fetch('/api/node?id=' + encodeURIComponent(node));
   const payload = await response.json();
-  document.querySelector('#details').textContent = payload.description || payload.error;
+  renderDetails(payload);
+}
+function renderDetails(payload) {
+  const details = document.querySelector('#details');
+  if (!payload.description) { details.textContent = payload.error || 'Unable to load lexical unit.'; return; }
+  const links = new Map();
+  for (const link of payload.lexical_function_links || []) {
+    if (!links.has(link.line)) links.set(link.line, []);
+    links.get(link.line).push(link);
+  }
+  const content = document.createDocumentFragment();
+  const lines = payload.description.split('\n');
+  lines.forEach((line, index) => {
+    const choices = links.get(line);
+    const relation = choices && choices.shift();
+    if (relation) {
+      content.append(document.createTextNode(relation.prefix));
+      const link = document.createElement('button');
+      link.type='button'; link.className='node-link'; link.textContent=relation.node_name;
+      link.addEventListener('click', () => showNode(relation.node_id));
+      content.append(link);
+    } else content.append(document.createTextNode(line));
+    if (index < lines.length - 1) content.append(document.createTextNode('\n'));
+  });
+  details.replaceChildren(content);
 }
 async function initialize() {
   const response = await fetch('/api/meta'); const meta = await response.json();
@@ -443,7 +522,11 @@ def create_server(
                         'features': sorted(set(queries.feature_names.values()), key=str.casefold),
                     })
                 if request.path == '/api/node':
-                    return self._json({'description': queries.describe_node(self._param(params, 'id'))})
+                    node_id = self._param(params, 'id')
+                    return self._json({
+                        'description': queries.describe_node(node_id),
+                        'lexical_function_links': queries.lexical_function_links(node_id),
+                    })
                 if request.path == '/api/search':
                     return self._search(params)
                 return self._json({'error': 'Not found'}, status=404)

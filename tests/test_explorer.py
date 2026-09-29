@@ -79,6 +79,13 @@ class TestLexnetQueries(unittest.TestCase):
         self.assertIn('Features: idiom', description)
         self.assertIn('Oper1', description)
 
+    def test_lexical_function_links_target_related_units(self):
+        outgoing = self.queries.lexical_function_links('n3')
+        incoming = self.queries.lexical_function_links('n1')
+        self.assertEqual(outgoing[0]['node_id'], 'n1')
+        self.assertEqual(outgoing[0]['node_name'], 'chat I')
+        self.assertEqual({link['node_id'] for link in incoming}, {'n2', 'n3'})
+
     def test_local_server_serves_page_and_search_api(self):
         server = create_server(self.queries, '/tmp/example')
         thread = threading.Thread(target=server.serve_forever)
@@ -89,13 +96,21 @@ class TestLexnetQueries(unittest.TestCase):
                 page = response.read().decode('utf-8')
             with urlopen(base_url + '/api/search?kind=word&q=chat&mode=exact&forms=1') as response:
                 payload = json.load(response)
+            with urlopen(base_url + '/api/node?id=n3') as response:
+                node_payload = json.load(response)
         finally:
             server.shutdown()
             server.server_close()
             thread.join()
 
         self.assertIn('LexNet Explorer', page)
+        self.assertIn('function sortBy(key)', page)
+        self.assertIn("th.setAttribute('aria-sort'", page)
+        self.assertIn("key === 'source_name' || key === 'target_name' || (key === 'form' && row.form)", page)
+        self.assertIn("row.source_id : row.target_id", page)
+        self.assertIn("(kind === 'word' || kind === 'feature') && key === 'std_name'", page)
         self.assertEqual({row['node_id'] for row in payload['rows']}, {'n1', 'n2'})
+        self.assertEqual(node_payload['lexical_function_links'][0]['node_id'], 'n1')
 
 
 if __name__ == '__main__':
