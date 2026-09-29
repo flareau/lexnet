@@ -205,6 +205,26 @@ def load_feature_names(file, path, encoding=DEFAULT_ENCODING):
     return feature_names
 
 
+def load_form_names(file, path, encoding=DEFAULT_ENCODING):
+    xml = load_xml(file=file, path=path, encoding=encoding)
+    form_names = pd.DataFrame([
+        {'form_id': tag.get('id'), 'name': tag.get('name')}
+        for tag in xml.iter('feature')
+    ])
+    print_imported(form_names, file, items='wordform features')
+    return form_names
+
+
+def load_label_names(file, path, encoding=DEFAULT_ENCODING):
+    xml = load_xml(file=file, path=path, encoding=encoding)
+    label_names = pd.DataFrame([
+        {'label_id': tag.get('id'), 'name': tag.get('name')}
+        for tag in xml.iter('instance')
+    ])
+    print_imported(label_names, file, items='semantic labels')
+    return label_names
+
+
 def load_lf_names(file, path, encoding=DEFAULT_ENCODING):
     xml = load_xml(file=file, path=path, encoding=encoding)
     tags = xml.findall('group/family/lexicalfunction')
@@ -275,6 +295,10 @@ def load(path, sources=None, columns=None, separator=DEFAULT_SEPARATOR, encoding
 
     ln['feature_names'] = load_feature_names(file=sources['feature_names'], path=path, encoding=encoding)
     ln['feature_names'].set_index('feature_id', inplace=True)
+    ln['form_names'] = load_form_names(file=sources['form_names'], path=path, encoding=encoding)
+    ln['form_names'].set_index('form_id', inplace=True)
+    ln['label_names'] = load_label_names(file=sources['label_names'], path=path, encoding=encoding)
+    ln['label_names'].set_index('label_id', inplace=True)
     ln['lf_names'] = load_lf_names(file=sources['lf_names'], path=path, encoding=encoding)
     ln['lf_names'].set_index('lf_id', inplace=True)
 

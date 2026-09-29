@@ -76,6 +76,14 @@ class LexnetQueries:
         self.node_entries = self.nodes['entry_id'].to_dict()
         self.lf_names = data['lf_names']['lf_name'].fillna('').astype(str).to_dict()
         self.feature_names = data['feature_names']['name'].fillna('').astype(str).to_dict()
+        self.form_names = self._name_map(data.get('form_names'))
+        self.label_names = self._name_map(data.get('label_names'))
+
+    @staticmethod
+    def _name_map(frame: pd.DataFrame | None) -> dict:
+        if frame is None or frame.empty or 'name' not in frame:
+            return {}
+        return frame['name'].fillna('').astype(str).to_dict()
 
     def search_words(
         self, query: str, mode: str = 'contains', include_forms: bool = True
@@ -208,8 +216,7 @@ class LexnetQueries:
         entry_id = node['entry_id']
         lines = [
             _text(node.get('std_name')) or _text(node_id),
-            f'Node: {node_id}',
-            f'Entry: {self.entry_names.get(entry_id, _text(entry_id))} ({entry_id})',
+            f'Entry: {self.entry_names.get(entry_id, _text(entry_id))}',
         ]
 
         feature_rows = _rows_for_index(self.data.get('features'), node_id)
@@ -239,8 +246,8 @@ class LexnetQueries:
                 if plain:
                     lines.append(plain)
 
-        self._append_simple_rows(lines, 'WORDFORMS', self.data.get('forms'), node_id, ['signifier', 'features'])
-        self._append_simple_rows(lines, 'SEMANTIC LABELS', self.data.get('labels'), node_id, ['label'])
+        self._append_wordforms(lines, node_id)
+        self._append_semantic_labels(lines, node_id)
         self._append_simple_rows(lines, 'PROPOSITIONAL FORMS', self.data.get('propforms'), node_id, ['propform'])
 
         relation_links = self.lexical_function_links(node_id)
@@ -260,6 +267,88 @@ class LexnetQueries:
                     lines.append(' • ' + re.sub(r'\s+', ' ', content).strip())
         return '\n'.join(lines)
 
+    def describe_entry(self, entry_id) -> str:
+        """Build a summary of an entry and its lexical units."""
+        if entry_id not in self.entries.index:
+            return f'Unknown lexical entry: {entry_id}'
+        entry = self.entries.loc[entry_id]
+        lines = [
+            _text(entry.get('entry_name')) or _text(entry_id),
+        ]
+        metadata = []
+        for column, label in [
+            ('addtoname', 'Additional name'), ('subscript', 'Subscript'),
+            ('superscript', 'Superscript'), ('entry_status', 'Status'),
+            ('entry_%', 'Confidence'),
+        ]:
+            value = _text(entry.get(column))
+            if value:
+                metadata.append(f'{label}: {value}')
+        if metadata:
+            lines.extend(['', 'ENTRY INFORMATION', *(' • ' + value for value in metadata)])
+
+        unit_links = self.entry_unit_links(entry_id)
+        if unit_links:
+            lines.extend(['', 'LEXICAL UNITS'])
+            lines.extend(link['line'] for link in unit_links)
+        return '\n'.join(lines)
+
+    def entry_unit_links(self, entry_id) -> list[dict[str, str]]:
+        """Return the units in an entry with compact grammatical summaries."""
+        units = self.nodes[self.nodes['entry_id'] == entry_id]
+        links = []
+        for node_id, node in units.sort_values(
+            'std_name', key=lambda values: values.fillna('').astype(str).str.casefold()
+        ).iterrows():
+            name = _text(node.get('std_name')) or _text(node_id)
+            grammar = self._node_grammar_summary(node_id)
+            suffix = f'  [{grammar}]' if grammar else ''
+            links.append({
+                'line': ' • ' + name + suffix,
+                'prefix': ' • ', 'suffix': suffix,
+                'item_type': 'node', 'item_id': _text(node_id), 'item_name': name,
+            })
+        return links
+
+    def _node_grammar_summary(self, node_id) -> str:
+        rows = _rows_for_index(self.data.get('features'), node_id)
+        if rows.empty:
+            return ''
+        values = []
+        for _, row in rows.iterrows():
+            pos = row.get('POS')
+            if _text(pos):
+                values.append(self.feature_names.get(pos, _text(pos)))
+            feature_ids = row.get('features', [])
+            if isinstance(feature_ids, (list, tuple, set)):
+                values.extend(self.feature_names.get(fid, _text(fid)) for fid in feature_ids)
+        return '; '.join(dict.fromkeys(filter(None, values)))
+
+    def inspector_payload(self, item_type: str, item_id) -> dict:
+        """Return a generic payload for the browser inspector."""
+        if item_type == 'node':
+            entry_id = self.node_entries.get(item_id)
+            links = []
+            if entry_id is not None:
+                name = self.entry_names.get(entry_id, _text(entry_id))
+                prefix, suffix = 'Entry: ', ''
+                links.append({
+                    'line': prefix + name + suffix,
+                    'prefix': prefix, 'suffix': suffix,
+                    'item_type': 'entry', 'item_id': _text(entry_id), 'item_name': name,
+                })
+            links.extend(self.lexical_function_links(item_id))
+            return {
+                'title': 'Lexical unit', 'description': self.describe_node(item_id),
+                'links': links,
+            }
+        if item_type == 'entry':
+            return {
+                'title': 'Lexical entry', 'description': self.describe_entry(item_id),
+                'links': self.entry_unit_links(item_id),
+            }
+        return {'title': 'Inspector', 'error': f'Unknown item type: {item_type}'}
+
     def lexical_function_links(self, node_id) -> list[dict[str, str]]:
         """Return display text and navigation targets for a unit's LF relations."""
         relations = self.data.get('lfs')
@@ -272,17 +361,44 @@ class LexnetQueries:
             name = self.node_names.get(row['target_id'], _text(row['target_id']))
             prefix = f" → {self.lf_names.get(row['lf_id'], row['lf_id'])}: "
             links.append({
-                'line': prefix + name, 'prefix': prefix,
-                'node_id': _text(row['target_id']), 'node_name': name,
+                'line': prefix + name, 'prefix': prefix, 'suffix': '',
+                'item_type': 'node', 'item_id': _text(row['target_id']), 'item_name': name,
             })
         for _, row in incoming.iterrows():
             name = self.node_names.get(row['source_id'], _text(row['source_id']))
             prefix = f" ← {self.lf_names.get(row['lf_id'], row['lf_id'])}: "
             links.append({
-                'line': prefix + name, 'prefix': prefix,
-                'node_id': _text(row['source_id']), 'node_name': name,
+                'line': prefix + name, 'prefix': prefix, 'suffix': '',
+                'item_type': 'node', 'item_id': _text(row['source_id']), 'item_name': name,
             })
         return links
+
+    def _append_wordforms(self, lines, node_id):
+        rows = _rows_for_index(self.data.get('forms'), node_id)
+        rendered = []
+        for _, row in rows.iterrows():
+            signifier = _text(row.get('signifier'))
+            feature_ids = split_query(_text(row.get('features')).strip('()'))
+            features = ', '.join(filter(None, (
+                self.form_names.get(fid, '' if fid.startswith('ls:') else fid)
+                for fid in feature_ids
+            )))
+            value = ' — '.join(filter(None, [signifier, features]))
+            if value:
+                rendered.append(' • ' + value)
+        if rendered:
+            lines.extend(['', 'WORDFORMS', *rendered])
+
+    def _append_semantic_labels(self, lines, node_id):
+        rows = _rows_for_index(self.data.get('labels'), node_id)
+        rendered = []
+        for _, row in rows.iterrows():
+            label_id = row.get('label')
+            name = self.label_names.get(label_id, 'Unknown semantic label')
+            if name:
+                rendered.append(' • ' + name)
+        if rendered:
+            lines.extend(['', 'SEMANTIC LABELS', *rendered])
 
     @staticmethod
     def _append_simple_rows(lines, title, frame, node_id, columns):
@@ -363,7 +479,7 @@ pre { flex: 1; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; m
     <div class="status" id="status">Ready.</div>
     <div class="table-wrap"><table><thead><tr id="head"></tr></thead><tbody id="results"></tbody></table></div>
   </section>
-  <section class="card details"><h2>Lexical unit details</h2><pre id="details">Select a result to inspect it.</pre></section>
+  <section class="card details"><h2 id="inspector-title">Inspector</h2><pre id="details">Select a result to inspect it.</pre></section>
 </main>
 <script>
 const columns = {
@@ -415,16 +531,18 @@ function renderRows() {
     const tr = document.createElement('tr');
     for (const [key] of columns[kind]) {
       const td=document.createElement('td'); td.title=row[key] || '';
-      if ((kind === 'word' || kind === 'feature') && key === 'std_name') {
+      if ((kind === 'word' || kind === 'feature') && (key === 'entry_name' || key === 'std_name')) {
         const link=document.createElement('button');
         link.type='button'; link.className='node-link'; link.textContent=row[key] || '';
-        link.addEventListener('click', () => showNode(row.node_id));
+        const itemType = key === 'entry_name' ? 'entry' : 'node';
+        const itemId = key === 'entry_name' ? row.entry_id : row.node_id;
+        link.addEventListener('click', () => showItem(itemType, itemId));
         td.append(link);
       } else if (kind === 'lf' && (key === 'source_name' || key === 'target_name' || (key === 'form' && row.form))) {
         const link=document.createElement('button');
         link.type='button'; link.className='node-link'; link.textContent=row[key] || '';
         const nodeId = key === 'source_name' ? row.source_id : row.target_id;
-        link.addEventListener('click', event => { event.stopPropagation(); showNode(nodeId); });
+        link.addEventListener('click', event => { event.stopPropagation(); showItem('node', nodeId); });
         td.append(link);
       } else td.textContent=row[key] || '';
       tr.append(td);
@@ -449,16 +567,18 @@ async function search(event) {
     renderHead(); renderRows();
   } catch (error) { status.textContent = error.message; }
 }
-async function showNode(node) {
-  const response = await fetch('/api/node?id=' + encodeURIComponent(node));
+async function showItem(itemType, itemId) {
+  const params = new URLSearchParams({type: itemType, id: itemId});
+  const response = await fetch('/api/inspect?' + params);
   const payload = await response.json();
   renderDetails(payload);
 }
 function renderDetails(payload) {
   const details = document.querySelector('#details');
-  if (!payload.description) { details.textContent = payload.error || 'Unable to load lexical unit.'; return; }
+  document.querySelector('#inspector-title').textContent = payload.title || 'Inspector';
+  if (!payload.description) { details.textContent = payload.error || 'Unable to load item.'; return; }
   const links = new Map();
-  for (const link of payload.lexical_function_links || []) {
+  for (const link of payload.links || []) {
     if (!links.has(link.line)) links.set(link.line, []);
     links.get(link.line).push(link);
   }
@@ -470,9 +590,10 @@ function renderDetails(payload) {
     if (relation) {
       content.append(document.createTextNode(relation.prefix));
       const link = document.createElement('button');
-      link.type='button'; link.className='node-link'; link.textContent=relation.node_name;
-      link.addEventListener('click', () => showNode(relation.node_id));
+      link.type='button'; link.className='node-link'; link.textContent=relation.item_name;
+      link.addEventListener('click', () => showItem(relation.item_type, relation.item_id));
       content.append(link);
+      content.append(document.createTextNode(relation.suffix || ''));
     } else content.append(document.createTextNode(line));
     if (index < lines.length - 1) content.append(document.createTextNode('\n'));
   });
@@ -521,12 +642,12 @@ def create_server(
                         'lexical_functions': sorted(set(queries.lf_names.values()), key=str.casefold),
                         'features': sorted(set(queries.feature_names.values()), key=str.casefold),
                     })
+                if request.path == '/api/inspect':
+                    return self._json(queries.inspector_payload(
+                        self._param(params, 'type'), self._param(params, 'id')
+                    ))
                 if request.path == '/api/node':
-                    node_id = self._param(params, 'id')
-                    return self._json({
-                        'description': queries.describe_node(node_id),
-                        'lexical_function_links': queries.lexical_function_links(node_id),
-                    })
+                    return self._json(queries.inspector_payload('node', self._param(params, 'id')))
                 if request.path == '/api/search':
                     return self._search(params)
                 return self._json({'error': 'Not found'}, status=404)

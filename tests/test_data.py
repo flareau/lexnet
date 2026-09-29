@@ -16,7 +16,8 @@ class TestRealDataIntegration(unittest.TestCase):
         required = {
             'nodes', 'entries', 'copolysemy', 'features', 'forms',
             'labels', 'propforms', 'lfs', 'definitions',
-            'feature_names', 'lf_names', 'examples', 'ex-rel'
+            'feature_names', 'form_names', 'label_names', 'lf_names',
+            'examples', 'ex-rel'
         }
         self.assertTrue(required.issubset(set(self.ln.keys())))
 
@@ -28,6 +29,8 @@ class TestRealDataIntegration(unittest.TestCase):
         self.assertEqual(self.ln['definitions'].index.name, 'node_id')
         self.assertEqual(self.ln['examples'].index.name, 'ex_id')
         self.assertEqual(self.ln['feature_names'].index.name, 'feature_id')
+        self.assertEqual(self.ln['form_names'].index.name, 'form_id')
+        self.assertEqual(self.ln['label_names'].index.name, 'label_id')
         self.assertEqual(self.ln['lf_names'].index.name, 'lf_id')
 
     def test_key_columns_present(self):
