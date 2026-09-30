@@ -115,6 +115,19 @@ function appendLexicalName(parent, label) {
   parent.append(container);
 }
 
+function appendSemanticSegments(parent, segments) {
+  for (const segment of segments || []) {
+    if (segment.actant) {
+      const variable = document.createElement('span');
+      variable.className = 'semantic-variable';
+      variable.textContent = segment.text;
+      variable.title = segment.actant;
+      variable.setAttribute('aria-label', `${segment.actant}: ${segment.text}`);
+      parent.append(variable);
+    } else parent.append(document.createTextNode(segment.text));
+  }
+}
+
 function selectTab(next) {
   kind = next;
   currentRows = []; sortKey = null; sortAscending = true;
@@ -268,16 +281,7 @@ function renderDetails(payload) {
       } else if (relation.information_text !== undefined) {
         const information = document.createElement('span');
         if (relation.information_segments) {
-          for (const segment of relation.information_segments) {
-            if (segment.actant) {
-              const variable = document.createElement('span');
-              variable.className = 'semantic-variable';
-              variable.textContent = segment.text;
-              variable.title = segment.actant;
-              variable.setAttribute('aria-label', `${segment.actant}: ${segment.text}`);
-              information.append(variable);
-            } else information.append(document.createTextNode(segment.text));
-          }
+          appendSemanticSegments(information, relation.information_segments);
         } else information.textContent = relation.information_text;
         if (relation.low_confidence) {
           information.className = 'low-confidence';
@@ -321,9 +325,38 @@ function renderDetails(payload) {
           appendLexicalName(link, relation.item_label);
           link.addEventListener('click', () => showItem(relation.item_type, relation.item_id));
           parent.append(link);
+          if (relation.unit_annotations) {
+            parent.append(document.createTextNode(' ('));
+            relation.unit_annotations.labels.forEach((label, index) => {
+              if (index) parent.append(document.createTextNode(', '));
+              const labelLink = document.createElement('button');
+              labelLink.type = 'button'; labelLink.className = 'node-link';
+              labelLink.textContent = label.text;
+              if (label.low_confidence) {
+                labelLink.classList.add('low-confidence');
+                labelLink.title = `Confidence: ${label.confidence}%`;
+              }
+              labelLink.addEventListener('click', () => showItem('semantic_label', label.item_id));
+              parent.append(labelLink);
+            });
+            if (relation.unit_annotations.labels.length && relation.unit_annotations.propforms.length) {
+              parent.append(document.createTextNode(' : '));
+            }
+            relation.unit_annotations.propforms.forEach((propform, index) => {
+              if (index) parent.append(document.createTextNode(', '));
+              const value = document.createElement('span');
+              if (propform.low_confidence) {
+                value.className = 'low-confidence';
+                value.title = `Confidence: ${propform.confidence}%`;
+              }
+              appendSemanticSegments(value, propform.segments);
+              parent.append(value);
+            });
+            parent.append(document.createTextNode(')'));
+          }
         } else appendLexicalName(parent, relation.label);
       }
-      parent.append(document.createTextNode(relation.suffix || ''));
+      if (!relation.unit_annotations) parent.append(document.createTextNode(relation.suffix || ''));
     } else parent.append(document.createTextNode(removeBullet ? line.slice(3) : line));
   }
   function appendRelationGroups(parent, relationLines) {
@@ -349,7 +382,7 @@ function renderDetails(payload) {
       while (sectionLines.at(-1) === '') sectionLines.pop();
       const section = document.createElement('details');
       section.className = 'inspector-section';
-      section.open = title !== 'WORDFORMS';
+      section.open = title !== 'WORDFORMS' && title !== 'ENTRY INFORMATION';
       const summary = document.createElement('summary');
       const itemCount = sectionLines.filter(line => line && line !== 'Outgoing' && line !== 'Incoming').length;
       summary.textContent = `${title} (${itemCount})`;

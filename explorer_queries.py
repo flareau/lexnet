@@ -699,29 +699,36 @@ class LexnetQueries:
             'std_name', key=lambda values: values.fillna('').astype(str).str.casefold()
         ).iterrows():
             name = self.node_names.get(node_id, _text(node_id))
-            grammar = self._node_grammar_summary(node_id)
-            suffix = f'  [{grammar}]' if grammar else ''
+            label_links = self.semantic_label_links(node_id)
+            propform_links = self.propositional_form_links(node_id)
+            annotations = {
+                'labels': [{
+                    'text': link['information_text'],
+                    'item_id': link['item_id'],
+                    'confidence': link['confidence'],
+                    'low_confidence': link['low_confidence'],
+                } for link in label_links],
+                'propforms': [{
+                    'text': link['information_text'],
+                    'segments': link['information_segments'],
+                    'confidence': link['confidence'],
+                    'low_confidence': link['low_confidence'],
+                } for link in propform_links],
+            }
+            annotation_groups = [
+                ', '.join(item['text'] for item in annotations['labels']),
+                ', '.join(item['text'] for item in annotations['propforms']),
+            ]
+            annotation_text = ' : '.join(filter(None, annotation_groups))
+            suffix = f' ({annotation_text})' if annotation_text else ''
             links.append({
                 'line': ' • ' + name + suffix,
                 'prefix': ' • ', 'suffix': suffix,
                 'item_type': 'node', 'item_id': _text(node_id), 'item_name': name,
                 'item_label': self.node_labels.get(node_id, {}),
+                'unit_annotations': annotations if annotation_text else None,
             })
         return links
-
-    def _node_grammar_summary(self, node_id):
-        rows = _rows_for_index(self.data.get('features'), node_id)
-        if rows.empty:
-            return ''
-        values = []
-        for _, row in rows.iterrows():
-            pos = row.get('POS')
-            if _text(pos):
-                values.append(self.feature_names.get(pos, _text(pos)))
-            feature_ids = row.get('features', [])
-            if isinstance(feature_ids, (list, tuple, set)):
-                values.extend(self.feature_names.get(fid, _text(fid)) for fid in feature_ids)
-        return '; '.join(dict.fromkeys(filter(None, values)))
 
     def inspector_payload(self, item_type, item_id):
         """Return a generic payload for the browser inspector."""

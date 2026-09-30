@@ -218,13 +218,18 @@ class TestLexnetQueries(unittest.TestCase):
             'X=‘chanteurs’',
         )
 
-    def test_entry_inspector_lists_units_with_grammar(self):
+    def test_entry_inspector_lists_units_with_semantic_information(self):
         payload = self.queries.inspector_payload('entry', 'e1')
         self.assertEqual(payload['title'], 'Lexical entry')
         self.assertEqual({link.get('item_id') for link in payload['links']} - {None}, {'n1', 'n2'})
-        self.assertIn('chat_N, masc_1_I  [noun]', payload['description'])
+        self.assertIn('chat_N, masc_1_I (Label One : X est un Y)', payload['description'])
         self.assertEqual(payload['links'][0]['label']['name'], 'chat')
         self.assertEqual(payload['links'][1]['item_label']['lexnum'], 'I')
+        self.assertEqual(payload['links'][1]['unit_annotations']['labels'][0]['text'], 'Label One')
+        self.assertEqual(
+            payload['links'][1]['unit_annotations']['propforms'][0]['text'],
+            'X est un Y',
+        )
 
     def test_node_inspector_links_back_to_its_entry(self):
         payload = self.queries.inspector_payload('node', 'n1')
@@ -306,6 +311,7 @@ class TestLexnetQueries(unittest.TestCase):
         self.assertIn('lf-constraint', script)
         self.assertIn('lf-merge', script)
         self.assertIn('function appendLexicalName', script)
+        self.assertIn("title !== 'ENTRY INFORMATION'", script)
         self.assertIn('lexical-name-sense', script)
         self.assertIn('lexical-name-scripts', script)
         self.assertIn('example-occurrence', script)
