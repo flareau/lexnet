@@ -41,4 +41,6 @@ tbody tr:hover { background: #edf6fc; }
 .inspector-section summary { color: #17212b; cursor: pointer; font-weight: 600; }
 .inspector-section summary:hover, .inspector-section summary:focus { color: #0878ba; }
 .inspector-section-content { padding-top: 4px; white-space: pre-wrap; }
+.inspector-list { margin: 4px 0 0; padding-left: 24px; white-space: normal; }
+.inspector-list li { margin: 2px 0; }
 @media (max-width: 850px) { main { height: auto; grid-template-columns: 1fr; } .card { min-height: 500px; } .details { min-height: 500px; } }

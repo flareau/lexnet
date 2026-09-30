@@ -105,17 +105,19 @@ function renderDetails(payload) {
     'DEFINITION', 'WORDFORMS', 'SEMANTIC LABELS', 'PROPOSITIONAL FORMS',
     'LEXICAL FUNCTIONS', 'EXAMPLES'
   ]);
-  function appendLine(parent, line) {
+  function appendLine(parent, line, removeBullet=false) {
     const choices = links.get(line);
     const relation = choices && choices.shift();
     if (relation) {
-      parent.append(document.createTextNode(relation.prefix));
+      const prefix = removeBullet && relation.prefix.startsWith(' • ')
+        ? relation.prefix.slice(3) : relation.prefix;
+      parent.append(document.createTextNode(prefix));
       const link = document.createElement('button');
       link.type='button'; link.className='node-link'; link.textContent=relation.item_name;
       link.addEventListener('click', () => showItem(relation.item_type, relation.item_id));
       parent.append(link);
       parent.append(document.createTextNode(relation.suffix || ''));
-    } else parent.append(document.createTextNode(line));
+    } else parent.append(document.createTextNode(removeBullet ? line.slice(3) : line));
   }
   let index = 0;
   while (index < lines.length) {
@@ -133,10 +135,20 @@ function renderDetails(payload) {
       summary.textContent = `${title} (${itemCount})`;
       const body = document.createElement('div');
       body.className = 'inspector-section-content';
-      sectionLines.forEach((line, lineIndex) => {
-        appendLine(body, line);
-        if (lineIndex < sectionLines.length - 1) body.append(document.createTextNode('\n'));
-      });
+      const manualBullets = sectionLines.length > 0 && sectionLines.every(line => line.startsWith(' • '));
+      const listed = manualBullets || title === 'LEXICAL FUNCTIONS';
+      if (listed) {
+        const list = document.createElement('ul'); list.className = 'inspector-list';
+        for (const line of sectionLines) {
+          const item = document.createElement('li'); appendLine(item, line, manualBullets); list.append(item);
+        }
+        body.append(list);
+      } else {
+        sectionLines.forEach((line, lineIndex) => {
+          appendLine(body, line);
+          if (lineIndex < sectionLines.length - 1) body.append(document.createTextNode('\n'));
+        });
+      }
       section.append(summary, body); content.append(section);
       if (end < lines.length) content.append(document.createTextNode('\n'));
       index = end;

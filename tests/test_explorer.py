@@ -129,6 +129,7 @@ class TestLexnetQueries(unittest.TestCase):
         self.assertIn('explorer.css', page)
         self.assertIn('explorer.js', page)
         self.assertIn('inspector-section', script)
+        self.assertIn("document.createElement('ul')", script)
 
     def test_local_server_serves_page_and_search_api(self):
         server = create_server(self.queries, '/tmp/example')
