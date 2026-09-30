@@ -90,9 +90,9 @@ async function showItem(itemType, itemId) {
   renderDetails(payload);
 }
 function renderDetails(payload) {
-  const details = document.querySelector('#details');
+  const inspector = document.querySelector('#details');
   document.querySelector('#inspector-title').textContent = payload.title || 'Inspector';
-  if (!payload.description) { details.textContent = payload.error || 'Unable to load item.'; return; }
+  if (!payload.description) { inspector.textContent = payload.error || 'Unable to load item.'; return; }
   const links = new Map();
   for (const link of payload.links || []) {
     if (!links.has(link.line)) links.set(link.line, []);
@@ -100,20 +100,53 @@ function renderDetails(payload) {
   }
   const content = document.createDocumentFragment();
   const lines = payload.description.split('\n');
-  lines.forEach((line, index) => {
+  const sectionTitles = new Set([
+    'ENTRY INFORMATION', 'LEXICAL UNITS', 'GRAMMATICAL INFORMATION',
+    'DEFINITION', 'WORDFORMS', 'SEMANTIC LABELS', 'PROPOSITIONAL FORMS',
+    'LEXICAL FUNCTIONS', 'EXAMPLES'
+  ]);
+  function appendLine(parent, line) {
     const choices = links.get(line);
     const relation = choices && choices.shift();
     if (relation) {
-      content.append(document.createTextNode(relation.prefix));
+      parent.append(document.createTextNode(relation.prefix));
       const link = document.createElement('button');
       link.type='button'; link.className='node-link'; link.textContent=relation.item_name;
       link.addEventListener('click', () => showItem(relation.item_type, relation.item_id));
-      content.append(link);
-      content.append(document.createTextNode(relation.suffix || ''));
-    } else content.append(document.createTextNode(line));
+      parent.append(link);
+      parent.append(document.createTextNode(relation.suffix || ''));
+    } else parent.append(document.createTextNode(line));
+  }
+  let index = 0;
+  while (index < lines.length) {
+    if (sectionTitles.has(lines[index])) {
+      const title = lines[index];
+      let end = index + 1;
+      while (end < lines.length && !sectionTitles.has(lines[end])) end += 1;
+      const sectionLines = lines.slice(index + 1, end);
+      while (sectionLines.at(-1) === '') sectionLines.pop();
+      const section = document.createElement('details');
+      section.className = 'inspector-section';
+      section.open = title !== 'WORDFORMS';
+      const summary = document.createElement('summary');
+      const itemCount = sectionLines.filter(Boolean).length;
+      summary.textContent = `${title} (${itemCount})`;
+      const body = document.createElement('div');
+      body.className = 'inspector-section-content';
+      sectionLines.forEach((line, lineIndex) => {
+        appendLine(body, line);
+        if (lineIndex < sectionLines.length - 1) body.append(document.createTextNode('\n'));
+      });
+      section.append(summary, body); content.append(section);
+      if (end < lines.length) content.append(document.createTextNode('\n'));
+      index = end;
+      continue;
+    }
+    appendLine(content, lines[index]);
     if (index < lines.length - 1) content.append(document.createTextNode('\n'));
-  });
-  details.replaceChildren(content);
+    index += 1;
+  }
+  inspector.replaceChildren(content);
 }
 async function initialize() {
   const response = await fetch('/api/meta'); const meta = await response.json();

@@ -37,5 +37,8 @@ tbody tr:hover { background: #edf6fc; }
 .node-link:hover, .node-link:focus { color: #064f79; }
 .details { display: flex; flex-direction: column; }
 .details h2 { font-size: 16px; margin: 0; padding: 14px; border-bottom: 1px solid #d8dee5; }
-pre { flex: 1; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; margin: 0; padding: 16px; font: 14px/1.5 system-ui, sans-serif; }
+.inspector-content { flex: 1; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; padding: 16px; font: 14px/1.5 system-ui, sans-serif; }
+.inspector-section summary { color: #17212b; cursor: pointer; font-weight: 600; }
+.inspector-section summary:hover, .inspector-section summary:focus { color: #0878ba; }
+.inspector-section-content { padding-top: 4px; white-space: pre-wrap; }
 @media (max-width: 850px) { main { height: auto; grid-template-columns: 1fr; } .card { min-height: 500px; } .details { min-height: 500px; } }

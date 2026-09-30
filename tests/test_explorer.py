@@ -123,9 +123,12 @@ class TestLexnetQueries(unittest.TestCase):
         self.assertTrue(PAGE_PATH.is_file())
         self.assertTrue(CSS_PATH.is_file())
         self.assertTrue(SCRIPT_PATH.is_file())
-        self.assertIn('<title>LexNet Explorer</title>', PAGE_PATH.read_text(encoding='utf8'))
-        self.assertIn('explorer.css', PAGE_PATH.read_text(encoding='utf8'))
-        self.assertIn('explorer.js', PAGE_PATH.read_text(encoding='utf8'))
+        page = PAGE_PATH.read_text(encoding='utf8')
+        script = SCRIPT_PATH.read_text(encoding='utf8')
+        self.assertIn('<title>LexNet Explorer</title>', page)
+        self.assertIn('explorer.css', page)
+        self.assertIn('explorer.js', page)
+        self.assertIn('inspector-section', script)
 
     def test_local_server_serves_page_and_search_api(self):
         server = create_server(self.queries, '/tmp/example')
