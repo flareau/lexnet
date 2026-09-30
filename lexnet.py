@@ -43,7 +43,6 @@ __all__ = [
     'std_name',
     'to_list',
     'smoke_test',
-    'test',
 ]
 
 

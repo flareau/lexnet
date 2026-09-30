@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>LexNet Explorer</title>
+<link rel="stylesheet" href="/explorer.css">
+</head>
+<body>
+<header><h1>LexNet Explorer</h1><span id="dataset"></span></header>
+<main>
+  <section class="card left">
+    <nav class="tabs">
+      <button class="tab active" data-kind="word">Words</button>
+      <button class="tab" data-kind="lf">Lexical functions</button>
+      <button class="tab" data-kind="feature">Features</button>
+    </nav>
+    <form class="panel active" id="word-panel" data-kind="word">
+      <div class="controls"><input type="text" name="q" placeholder="Search a word…" autofocus><select name="mode"><option>contains</option><option>starts with</option><option>exact</option></select><button class="search">Search</button></div>
+      <label class="options"><span><input type="checkbox" name="forms" checked> Include inflected forms</span></label>
+    </form>
+    <form class="panel" id="lf-panel" data-kind="lf">
+      <div class="controls">
+        <div class="tree-select" id="lf-family">
+          <button type="button" class="tree-select-toggle" aria-haspopup="listbox" aria-expanded="false">Choose a family…</button>
+          <div class="tree-select-menu" role="listbox" hidden></div>
+          <input type="hidden" name="family_id" value="">
+        </div>
+        <select name="lf_id" id="lf-function" disabled><option value="">Choose a family first</option></select>
+      </div>
+      <div class="controls" style="margin-top: 8px"><input type="text" name="q" list="lf-names" placeholder="Or enter LF names: Magn, Oper1, …"><datalist id="lf-names"></datalist><button class="search">Search</button></div>
+    </form>
+    <form class="panel" id="feature-panel" data-kind="feature">
+      <div class="controls"><input type="text" name="q" list="feature-names" placeholder="locution forte, …"><datalist id="feature-names"></datalist><button class="search">Search</button></div>
+      <div class="options"><label><input type="radio" name="combine" value="any" checked> Match any</label><label><input type="radio" name="combine" value="all"> Match all</label></div>
+    </form>
+    <div class="status" id="status">Ready.</div>
+    <div class="table-wrap"><table><thead><tr id="head"></tr></thead><tbody id="results"></tbody></table></div>
+  </section>
+  <section class="card details"><h2 id="inspector-title">Inspector</h2><pre id="details">Select a result to inspect it.</pre></section>
+</main>
+<script src="/explorer.js"></script>
+</body>
+</html>

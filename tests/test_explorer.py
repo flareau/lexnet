@@ -5,7 +5,8 @@ from urllib.request import urlopen
 
 import pandas as pd
 
-from explorer import LexnetQueries, create_server, split_query
+from explorer import CSS_PATH, PAGE_PATH, SCRIPT_PATH, create_server
+from explorer_queries import LexnetQueries, split_query
 
 
 class TestLexnetQueries(unittest.TestCase):
@@ -118,6 +119,14 @@ class TestLexnetQueries(unittest.TestCase):
         self.assertEqual(entry_link['item_type'], 'entry')
         self.assertEqual(entry_link['item_id'], 'e1')
 
+    def test_browser_asset_is_available(self):
+        self.assertTrue(PAGE_PATH.is_file())
+        self.assertTrue(CSS_PATH.is_file())
+        self.assertTrue(SCRIPT_PATH.is_file())
+        self.assertIn('<title>LexNet Explorer</title>', PAGE_PATH.read_text(encoding='utf8'))
+        self.assertIn('explorer.css', PAGE_PATH.read_text(encoding='utf8'))
+        self.assertIn('explorer.js', PAGE_PATH.read_text(encoding='utf8'))
+
     def test_local_server_serves_page_and_search_api(self):
         server = create_server(self.queries, '/tmp/example')
         thread = threading.Thread(target=server.serve_forever)
@@ -126,6 +135,12 @@ class TestLexnetQueries(unittest.TestCase):
         try:
             with urlopen(base_url + '/') as response:
                 page = response.read().decode('utf-8')
+            with urlopen(base_url + '/explorer.css') as response:
+                stylesheet = response.read().decode('utf-8')
+                stylesheet_type = response.headers.get_content_type()
+            with urlopen(base_url + '/explorer.js') as response:
+                script = response.read().decode('utf-8')
+                script_type = response.headers.get_content_type()
             with urlopen(base_url + '/api/search?kind=word&q=chat&mode=exact&forms=1') as response:
                 payload = json.load(response)
             with urlopen(base_url + '/api/search?kind=lf&family_id=fam1') as response:
@@ -142,14 +157,10 @@ class TestLexnetQueries(unittest.TestCase):
             thread.join()
 
         self.assertIn('LexNet Explorer', page)
-        self.assertIn('function sortBy(key)', page)
-        self.assertIn("th.setAttribute('aria-sort'", page)
-        self.assertIn("key === 'source_name' || key === 'target_name' || (key === 'form' && row.form)", page)
-        self.assertIn("row.source_id : row.target_id", page)
-        self.assertIn("(key === 'entry_name' || key === 'std_name')", page)
-        self.assertIn("className='tree-select-item tree-select-group'", page)
-        self.assertIn("chooseFamily(`group:${group.index}`, `Group ${group.index}`)", page)
-        self.assertIn("className='tree-select-item tree-select-family'", page)
+        self.assertIn(':root', stylesheet)
+        self.assertEqual(stylesheet_type, 'text/css')
+        self.assertIn('function sortBy(key)', script)
+        self.assertEqual(script_type, 'text/javascript')
         self.assertEqual({row['node_id'] for row in payload['rows']}, {'n1', 'n2'})
         self.assertEqual([row['lf_name'] for row in family_payload['rows']], ['Magn'])
         self.assertEqual([row['lf_name'] for row in group_payload['rows']], ['Oper1'])

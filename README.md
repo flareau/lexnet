@@ -12,7 +12,9 @@ Utilities to load Lexical Network export files into Pandas DataFrames and Python
 - `loader.py`: loads data into dataframes
 - `models.py`: domain classes
 - `lexnet.py`: wrapper
-- `explorer.py`: read-only browser interface
+- `explorer.py`: read-only browser server and command-line entry point
+- `explorer_queries.py`: explorer search and inspection logic
+- `web/`: browser interface, styles, and behavior
 - `tests/`: unit and integration tests
 
 ## Basic Usage
