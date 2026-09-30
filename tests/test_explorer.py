@@ -6,7 +6,7 @@ from urllib.request import urlopen
 import pandas as pd
 
 from explorer import CSS_PATH, PAGE_PATH, SCRIPT_PATH, create_server
-from explorer_queries import LexnetQueries, _example_segments, split_query
+from explorer_queries import LexnetQueries, _example_segments, _propform_segments, split_query
 
 
 class TestLexnetQueries(unittest.TestCase):
@@ -51,7 +51,10 @@ class TestLexnetQueries(unittest.TestCase):
                 {'node_id': 'n1', 'semantic_label_id': 'sl1', 'label_%': 90},
             ]).set_index('node_id'),
             'propforms': pd.DataFrame([
-                {'node_id': 'n1', 'propform': 'X est un chat', 'propform_confid': 80},
+                {
+                    'node_id': 'n1', 'propform': '$1 est un $2',
+                    'propform_confid': 80, 'actants': '($1=X,$2=Y)',
+                },
             ]).set_index('node_id'),
             'examples': pd.DataFrame([
                 {'example_id': 'x1', 'content': '<p>Le chat dort.</p>'},
@@ -147,6 +150,35 @@ class TestLexnetQueries(unittest.TestCase):
         self.assertEqual([link['function_name'] for link in links], ['Alpha', 'Zeta', 'FamilyTwo', 'Late'])
         self.assertEqual([item['item_id'] for item in links[1]['items']], ['n3', 'n2'])
 
+    def test_lexical_function_names_use_source_actant_variables(self):
+        data = dict(self.data)
+        data['lf_names'] = pd.concat([
+            self.data['lf_names'],
+            pd.DataFrame([{
+                'lexical_function_id': 'lf3', 'lf_name': '$1=‘chanteurs’',
+                'group_index': 3, 'family_index': 1,
+            }]).set_index('lexical_function_id'),
+        ])
+        data['lfs'] = pd.DataFrame([{
+            'source_node_id': 'n1', 'lexical_function_id': 'lf3',
+            'target_node_id': 'n2', 'position': 1,
+        }])
+        queries = LexnetQueries(data)
+
+        outgoing = queries.lexical_function_links('n1')[0]
+        incoming = queries.lexical_function_links('n2')[0]
+        result = queries.search_lexical_function_ids(['lf3']).iloc[0]
+
+        self.assertEqual(outgoing['function_name'], 'X=‘chanteurs’')
+        self.assertEqual(incoming['function_name'], 'X=‘chanteurs’')
+        self.assertEqual(result.lf_name, 'X=‘chanteurs’')
+        self.assertEqual(outgoing['function_segments'][0], {'text': 'X', 'actant': '$1'})
+        self.assertEqual(queries.lf_display_names['lf3'], 'X=‘chanteurs’')
+        self.assertEqual(
+            queries.search_lexical_functions('X=‘chanteurs’').iloc[0].lf_name,
+            'X=‘chanteurs’',
+        )
+
     def test_entry_inspector_lists_units_with_grammar(self):
         payload = self.queries.inspector_payload('entry', 'e1')
         self.assertEqual(payload['title'], 'Lexical entry')
@@ -166,12 +198,30 @@ class TestLexnetQueries(unittest.TestCase):
     def test_information_confidence_is_exposed_consistently(self):
         payload = self.queries.inspector_payload('node', 'n1')
         label = next(link for link in payload['links'] if link.get('information_text') == 'Label One')
-        propform = next(link for link in payload['links'] if link.get('information_text') == 'X est un chat')
+        propform = next(link for link in payload['links'] if link.get('information_text') == 'X est un Y')
 
         self.assertTrue(label['low_confidence'])
         self.assertEqual(label['confidence'], 90)
         self.assertTrue(propform['low_confidence'])
         self.assertEqual(propform['confidence'], 80)
+        self.assertEqual(
+            [segment.get('actant') for segment in propform['information_segments'] if segment.get('actant')],
+            ['$1', '$2'],
+        )
+
+    def test_propform_segments_support_subactants_and_generic_references(self):
+        segments = _propform_segments(
+            '$1 agit sur $2, surtout $2.2',
+            '($1=X,$2.1=Y1,$2.2=Y2)',
+        )
+
+        self.assertEqual(''.join(segment['text'] for segment in segments), 'X agit sur Y, surtout Y2')
+        self.assertEqual(
+            [segment['actant'] for segment in segments if 'actant' in segment],
+            ['$1', '$2', '$2.2'],
+        )
+        mismatched = _propform_segments('~ sur $1', '($2=X)')
+        self.assertEqual(''.join(segment['text'] for segment in mismatched), '~ sur X')
 
     def test_examples_follow_position_and_mark_occurrences(self):
         links = self.queries.example_links('n1')
@@ -257,6 +307,7 @@ class TestLexnetQueries(unittest.TestCase):
         self.assertEqual({row['node_id'] for row in payload['rows']}, {'n1', 'n2'})
         self.assertEqual(payload['rows'][0]['entry_label']['subscript'], 'N, masc')
         self.assertEqual([row['lf_name'] for row in family_payload['rows']], ['Magn', 'Magn'])
+        self.assertIsInstance(family_payload['rows'][0]['lf_name_segments'], list)
         self.assertEqual([row['lf_name'] for row in group_payload['rows']], ['Oper1'])
         incoming = next(link for link in node_payload['links'] if link.get('direction') == 'Incoming')
         self.assertEqual(incoming['items'][0]['item_id'], 'n1')

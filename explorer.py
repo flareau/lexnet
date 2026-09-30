@@ -24,7 +24,9 @@ SCRIPT = SCRIPT_PATH.read_text(encoding='utf8')
 def _records(frame, limit=2000):
     def json_value(value):
         if isinstance(value, dict):
-            return {key: _text(item) for key, item in value.items()}
+            return {key: json_value(item) for key, item in value.items()}
+        if isinstance(value, (list, tuple)):
+            return [json_value(item) for item in value]
         return _text(value)
 
     return [
@@ -53,7 +55,9 @@ def create_server(queries, data_path, host='127.0.0.1', port=0):
                         'path': data_path,
                         'entries': len(queries.entries),
                         'units': len(queries.nodes),
-                        'lexical_functions': sorted(set(queries.lf_names.values()), key=str.casefold),
+                        'lexical_functions': sorted(
+                            set(queries.lf_display_names.values()), key=str.casefold,
+                        ),
                         'lf_hierarchy': queries.lexical_function_hierarchy(),
                         'features': sorted(set(queries.feature_names.values()), key=str.casefold),
                     })

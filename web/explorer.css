@@ -49,6 +49,7 @@ tbody tr:hover { background: #edf6fc; }
 .lexical-name.low-confidence .lexical-name-sense { color: inherit; }
 .example-occurrence { background: #c4e8fd; color: #471e00; font-weight: 600; }
 .low-confidence .example-occurrence { color: inherit; }
+.semantic-variable { font-family: "STIX Two Math", "Cambria Math", "Latin Modern Math", "Times New Roman", serif; font-style: italic; }
 .lf-values { display: inline; margin: 0; padding: 0; list-style: none; }
 .lf-values li { display: inline; }
 .lf-values li:not(:last-child)::after { content: ', '; }

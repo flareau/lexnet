@@ -14,9 +14,22 @@ const head = document.querySelector('#head');
 
 const atomicLfNames = ['De_nouveau'];
 
-function appendLfName(parent, name) {
+function appendLfName(parent, name, semanticSegments=null) {
   const container = document.createElement('span');
   container.className = 'lf-name';
+  if (Array.isArray(semanticSegments) && semanticSegments.some(segment => segment.actant)) {
+    for (const segment of semanticSegments) {
+      if (segment.actant) {
+        const variable = document.createElement('span');
+        variable.className = 'semantic-variable'; variable.textContent = segment.text;
+        variable.title = segment.actant;
+        variable.setAttribute('aria-label', `${segment.actant}: ${segment.text}`);
+        container.append(variable);
+      } else container.append(document.createTextNode(segment.text));
+    }
+    parent.append(container);
+    return;
+  }
   let plainText = '';
   const flushText = () => {
     if (!plainText) return;
@@ -157,7 +170,7 @@ function renderRows() {
         link.addEventListener('click', event => { event.stopPropagation(); showItem('node', row.target_node_id); });
         td.append(link);
       } else if (kind === 'lf' && key === 'lf_name') {
-        appendLfName(td, row[key] || '');
+        appendLfName(td, row[key] || '', row.lf_name_segments);
       } else td.textContent=row[key] || '';
       tr.append(td);
     }
@@ -208,7 +221,7 @@ function renderDetails(payload) {
     const relation = choices && choices.shift();
     if (relation) {
       if (relation.function_name) {
-        appendLfName(parent, relation.function_name);
+        appendLfName(parent, relation.function_name, relation.function_segments);
         parent.append(document.createTextNode(': '));
       } else {
         const prefix = removeBullet && relation.prefix.startsWith(' • ')
@@ -232,7 +245,18 @@ function renderDetails(payload) {
         parent.append(example);
       } else if (relation.information_text !== undefined) {
         const information = document.createElement('span');
-        information.textContent = relation.information_text;
+        if (relation.information_segments) {
+          for (const segment of relation.information_segments) {
+            if (segment.actant) {
+              const variable = document.createElement('span');
+              variable.className = 'semantic-variable';
+              variable.textContent = segment.text;
+              variable.title = segment.actant;
+              variable.setAttribute('aria-label', `${segment.actant}: ${segment.text}`);
+              information.append(variable);
+            } else information.append(document.createTextNode(segment.text));
+          }
+        } else information.textContent = relation.information_text;
         if (relation.low_confidence) {
           information.className = 'low-confidence';
           information.title = `Confidence: ${relation.confidence}%`;

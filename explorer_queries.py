@@ -12,12 +12,13 @@ EMPTY_WORD_RESULTS = [
 ]
 EMPTY_LF_RESULTS = [
     'lf_name', 'source_node_id', 'source_name', 'target_node_id', 'target_name',
-    'source_label', 'target_label', 'form', 'frame', 'constraint'
+    'source_label', 'target_label', 'form', 'frame', 'constraint', 'lf_name_segments'
 ]
 EMPTY_FEATURE_RESULTS = [
     'entry_id', 'entry_name', 'entry_label', 'node_id', 'std_name', 'unit_label',
     'matching_features'
 ]
+DEFAULT_ACTANT_LABELS = {'1': 'X', '2': 'Y', '3': 'Z', '4': 'W', '5': 'V', '6': 'U'}
 
 
 def split_query(text):
@@ -160,6 +161,60 @@ def _confidence(value):
     return int(number) if number.is_integer() else number
 
 
+def _actant_labels(actants):
+    """Parse a LexNet actant list into code-to-variable mappings."""
+    labels = dict(re.findall(
+        r'\$(\d+(?:\.\d+)?)\s*=\s*([^,)]*)',
+        _text(actants),
+    ))
+
+    # Some forms use a generic $i while the list only defines $i.1, $i.2, etc.
+    # In that case Y1/Y2 unambiguously imply the generic semantic variable Y.
+    for key in list(labels):
+        if '.' not in key:
+            continue
+        base = key.split('.', 1)[0]
+        if base in labels:
+            continue
+        sublabels = [label for item, label in labels.items() if item.startswith(base + '.')]
+        stems = {re.sub(r'\d+$', '', label) for label in sublabels}
+        if len(stems) == 1:
+            labels[base] = stems.pop()
+    return labels
+
+
+def _actant_segments(text, labels):
+    """Replace actant codes in text and retain their identity for markup."""
+    text = _text(text)
+    segments = []
+    position = 0
+    for match in re.finditer(r'\$(\d+(?:\.\d+)?)', text):
+        if match.start() > position:
+            segments.append({'text': text[position:match.start()]})
+        key = match.group(1)
+        label = labels.get(key)
+        if label:
+            segments.append({'text': label, 'actant': '$' + key})
+        else:
+            segments.append({'text': match.group(0)})
+        position = match.end()
+    if position < len(text):
+        segments.append({'text': text[position:]})
+    return segments
+
+
+def _propform_segments(propform, actants):
+    """Replace propform actant codes with their textual semantic variables."""
+    labels = _actant_labels(actants)
+
+    placeholders = set(re.findall(r'\$(\d+(?:\.\d+)?)', _text(propform)))
+    if len(placeholders) == 1 and len(set(labels.values())) == 1:
+        # Two source rows disagree on $1 versus $2, but each has only one
+        # possible semantic variable, so the intended display is unambiguous.
+        labels.setdefault(placeholders.pop(), next(iter(labels.values())))
+    return _actant_segments(propform, labels)
+
+
 class LexnetQueries:
     """Search operations used by the GUI, kept independent of the web UI."""
 
@@ -193,6 +248,16 @@ class LexnetQueries:
         self.node_names = {key: _name_text(value) for key, value in self.node_labels.items()}
         self.lf_table = data['lf_names']
         self.lf_names = self.lf_table['lf_name'].fillna('').astype(str).to_dict()
+        self.lf_display_names = {
+            function_id: ''.join(
+                segment['text'] for segment in _actant_segments(name, DEFAULT_ACTANT_LABELS)
+            )
+            for function_id, name in self.lf_names.items()
+        }
+        self.node_actants = {
+            node_id: _actant_labels(row.get('actants'))
+            for node_id, row in data.get('propforms', pd.DataFrame()).iterrows()
+        }
         self.lf_order = {
             lexical_function_id: (
                 _number(row.get('group_index')),
@@ -273,7 +338,9 @@ class LexnetQueries:
 
     def search_lexical_functions(self, names):
         """Return source/target occurrences for one or more LF names."""
-        lexical_function_ids = self._resolve_names(split_query(names), self.lf_names)
+        queries = split_query(names)
+        lexical_function_ids = self._resolve_names(queries, self.lf_names)
+        lexical_function_ids.update(self._resolve_names(queries, self.lf_display_names))
         return self.search_lexical_function_ids(lexical_function_ids)
 
     def search_lexical_function_ids(self, lexical_function_ids):
@@ -289,8 +356,12 @@ class LexnetQueries:
             source_node_id = relation['source_node_id']
             target_node_id = relation['target_node_id']
             lexical_function_id = relation['lexical_function_id']
+            function_segments = self._lexical_function_name_segments(
+                lexical_function_id, source_node_id,
+            )
             rows.append({
-                'lf_name': self.lf_names.get(lexical_function_id, _text(lexical_function_id)),
+                'lf_name': ''.join(segment['text'] for segment in function_segments),
+                'lf_name_segments': function_segments,
                 'source_node_id': source_node_id,
                 'source_name': self.node_names.get(source_node_id, _text(source_node_id)),
                 'source_label': self.node_labels.get(source_node_id, {}),
@@ -305,6 +376,12 @@ class LexnetQueries:
             ['lf_name', 'source_name', 'target_name'],
             key=lambda col: col.astype(str).str.casefold(),
         ).reset_index(drop=True)
+
+    def _lexical_function_name_segments(self, function_id, source_node_id):
+        """Return an LF name with actants resolved for its source unit."""
+        labels = {**DEFAULT_ACTANT_LABELS, **self.node_actants.get(source_node_id, {})}
+        name = self.lf_names.get(function_id, _text(function_id))
+        return _actant_segments(name, labels)
 
     def lexical_function_ids_for_family(self, family_id):
         """Return LF IDs belonging to a family, preserving XML order."""
@@ -331,7 +408,12 @@ class LexnetQueries:
                     'id': _text(family_id),
                     'name': _text(family_rows.iloc[0]['family_name']),
                     'functions': [
-                        {'id': _text(lexical_function_id), 'name': _text(row['lf_name'])}
+                        {
+                            'id': _text(lexical_function_id),
+                            'name': self.lf_display_names.get(
+                                lexical_function_id, _text(row['lf_name']),
+                            ),
+                        }
                         for lexical_function_id, row in family_rows.iterrows()
                     ],
                 })
@@ -564,7 +646,11 @@ class LexnetQueries:
         for _, row in _rows_for_index(self.data.get('propforms'), node_id).iterrows():
             propform = _text(row.get('propform'))
             if propform:
-                links.append(self._confidence_link(propform, row.get('propform_confid')))
+                segments = _propform_segments(propform, row.get('actants'))
+                text = ''.join(segment['text'] for segment in segments)
+                link = self._confidence_link(text, row.get('propform_confid'))
+                link['information_segments'] = segments
+                links.append(link)
         return links
 
     def example_links(self, node_id):
@@ -610,6 +696,11 @@ class LexnetQueries:
             groups = {}
             for _, row in rows.iterrows():
                 function_id = row['lexical_function_id']
+                function_segments = self._lexical_function_name_segments(
+                    function_id, row['source_node_id'],
+                )
+                function_name = ''.join(segment['text'] for segment in function_segments)
+                group_key = (function_id, function_name)
                 related_id = row[related_id_column]
                 name = self.node_names.get(related_id, _text(related_id))
                 item = {
@@ -621,11 +712,17 @@ class LexnetQueries:
                     'constraint': _text(row.get('constraint')),
                     'merged': related_id_column == 'target_node_id' and _text(row.get('merged')) == '1',
                 }
-                groups.setdefault(function_id, []).append((_number(row.get('position')), item))
+                group = groups.setdefault(group_key, {
+                    'segments': function_segments,
+                    'items': [],
+                })
+                group['items'].append((_number(row.get('position')), item))
             fallback = (float('inf'), float('inf'), '', '')
-            for function_id in sorted(groups, key=lambda item: self.lf_order.get(item, fallback)):
-                items = [item for _, item in sorted(groups[function_id], key=lambda pair: pair[0])]
-                function_name = self.lf_names.get(function_id, function_id)
+            for function_id, function_name in sorted(
+                groups, key=lambda item: self.lf_order.get(item[0], fallback),
+            ):
+                group = groups[(function_id, function_name)]
+                items = [item for _, item in sorted(group['items'], key=lambda pair: pair[0])]
                 prefix = f'{function_name}: '
                 def item_text(item):
                     merged = '//' if item['merged'] else ''
@@ -637,6 +734,7 @@ class LexnetQueries:
                     'prefix': prefix,
                     'suffix': '',
                     'function_name': _text(function_name),
+                    'function_segments': group['segments'],
                     'items': items,
                     'direction': direction,
                 })
