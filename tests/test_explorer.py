@@ -295,6 +295,7 @@ class TestLexnetQueries(unittest.TestCase):
         self.assertIn('explorer.css', page)
         self.assertIn('explorer.js', page)
         self.assertIn('Semantic labels', page)
+        self.assertIn('semantic-browser', page)
         self.assertIn('inspector-section', script)
         self.assertIn("document.createElement('ul')", script)
         self.assertIn('lf-values', script)
@@ -324,6 +325,8 @@ class TestLexnetQueries(unittest.TestCase):
             with urlopen(base_url + '/explorer.js') as response:
                 script = response.read().decode('utf-8')
                 script_type = response.headers.get_content_type()
+            with urlopen(base_url + '/api/meta') as response:
+                meta_payload = json.load(response)
             with urlopen(base_url + '/api/search?kind=word&q=chat&mode=exact&forms=1') as response:
                 payload = json.load(response)
             with urlopen(base_url + '/api/search?kind=lf&family_id=fam1') as response:
@@ -346,6 +349,8 @@ class TestLexnetQueries(unittest.TestCase):
         self.assertEqual(stylesheet_type, 'text/css')
         self.assertIn('function sortBy(key)', script)
         self.assertEqual(script_type, 'text/javascript')
+        self.assertEqual(meta_payload['semantic_hierarchy'][0]['count'], 1)
+        self.assertTrue(meta_payload['semantic_hierarchy'][1]['semantic_field'])
         self.assertEqual({row['node_id'] for row in payload['rows']}, {'n1', 'n2'})
         self.assertEqual(payload['rows'][0]['entry_label']['subscript'], 'N, masc')
         self.assertEqual([row['lf_name'] for row in family_payload['rows']], ['Magn', 'Magn'])

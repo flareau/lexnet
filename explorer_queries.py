@@ -293,6 +293,11 @@ class LexnetQueries:
                 label_id = membership['semantic_label_id']
                 self.class_labels.setdefault(class_id, []).append(label_id)
                 self.label_class_ids.setdefault(label_id, []).append(class_id)
+        label_relations = data.get('labels')
+        self.label_assignment_counts = (
+            label_relations['semantic_label_id'].value_counts().to_dict()
+            if label_relations is not None and not label_relations.empty else {}
+        )
 
     @staticmethod
     def _name_map(frame):
@@ -496,10 +501,15 @@ class LexnetQueries:
                 return
             row = self.label_classes.loc[class_id]
             direct_labels = sorted(
-                ({'id': _text(label_id), 'name': self.label_names.get(label_id, _text(label_id))}
+                ({
+                    'id': _text(label_id),
+                    'name': self.label_names.get(label_id, _text(label_id)),
+                    'count': int(self.label_assignment_counts.get(label_id, 0)),
+                }
                  for label_id in self.class_labels.get(class_id, [])),
                 key=lambda item: item['name'].casefold(),
             )
+            descendant_labels = self.semantic_label_ids_for_class(class_id, True)
             rows.append({
                 'id': _text(class_id),
                 'name': _text(row.get('name')),
@@ -507,6 +517,9 @@ class LexnetQueries:
                 'semantic_field': _text(row.get('semantic_field')) == '1',
                 'inheritance_type': _text(row.get('inheritance_type')),
                 'labels': direct_labels,
+                'count': int(sum(self.label_assignment_counts.get(item, 0) for item in descendant_labels)),
+                'has_children': bool(self.class_children.get(class_id) or direct_labels),
+                'multiple_paths': len(self.class_parents.get(class_id, [])) > 1,
             })
             next_ancestors = ancestors | {class_id}
             children = sorted(

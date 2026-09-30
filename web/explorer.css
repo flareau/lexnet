@@ -25,12 +25,31 @@ button.search { background: #0878ba; border-color: #0878ba; color: white; cursor
 .tree-select-item:hover, .tree-select-item:focus { background: #edf6fc; outline: none; }
 .tree-select-group { color: #6d7882; font-weight: 600; background: #f3f5f7; }
 .tree-select-family { padding-left: 28px; }
-.semantic-class-menu { min-width: 440px; }
-.semantic-class-item { font-size: 13px; }
-.semantic-field-item { font-weight: 650; }
 .options { margin-top: 9px; display: flex; gap: 18px; font-size: 14px; }
 .status { padding: 8px 14px; color: #536475; background: #f7f9fa; border-bottom: 1px solid #d8dee5; font-size: 13px; }
+.results-area { display: flex; flex: 1; min-height: 0; }
 .table-wrap { overflow: auto; flex: 1; }
+.semantic-browser { display: none; width: 330px; min-width: 250px; overflow: hidden; border-right: 1px solid #d8dee5; background: #fbfcfd; }
+.semantic-mode .semantic-browser { display: flex; flex-direction: column; }
+.semantic-browser-header { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 8px 10px; border-bottom: 1px solid #d8dee5; font-size: 13px; }
+.semantic-browser-header span { display: flex; gap: 4px; }
+.semantic-browser-header button { padding: 2px 5px; border: 0; background: transparent; color: #0878ba; font: inherit; cursor: pointer; }
+.semantic-tree { flex: 1; overflow: auto; padding: 6px 8px 16px; font-size: 13px; }
+.semantic-tree ul { margin: 0; padding-left: 17px; list-style: none; }
+.semantic-tree > ul { padding-left: 0; }
+.semantic-tree li[hidden] { display: none; }
+.semantic-tree details > summary { display: flex; align-items: baseline; min-height: 24px; cursor: pointer; }
+.semantic-tree details > summary::marker { content: ''; }
+.semantic-tree details > summary::before { content: '▸'; width: 13px; color: #6d7882; }
+.semantic-tree details[open] > summary::before { content: '▾'; }
+.semantic-label-row { display: flex; align-items: baseline; padding-left: 13px; }
+.semantic-tree-node { min-width: 0; padding: 2px 4px; border: 0; border-radius: 3px; background: transparent; color: #273746; font: inherit; text-align: left; cursor: pointer; }
+.semantic-tree-node:hover, .semantic-tree-node:focus { background: #e5f2fa; color: #064f79; outline: none; }
+.semantic-tree-node.selected { background: #d8edf9; color: #064f79; font-weight: 600; }
+.semantic-tree-node.semantic-field { font-weight: 650; }
+.semantic-tree-label { color: #536475; font-style: italic; }
+.semantic-tree-count { margin-left: auto; padding-right: 3px; color: #8a949d; font-size: 11px; font-variant-numeric: tabular-nums; }
+.semantic-multiple { color: #8a949d; cursor: help; }
 table { width: 100%; border-collapse: collapse; font-size: 14px; }
 th { position: sticky; top: 0; background: #f0f3f6; text-align: left; padding: 8px 10px; border-bottom: 1px solid #cbd3db; cursor: pointer; user-select: none; }
 th:hover, th:focus { background: #e3e9ee; outline: none; }
@@ -76,4 +95,4 @@ tbody tr:hover { background: #edf6fc; }
 .relation-group h3 { margin: 6px 0 2px; font-size: 14px; }
 .relation-group .inspector-list { margin-top: 2px; }
 .relation-group + .relation-group { margin-top: 8px; }
-@media (max-width: 850px) { main { height: auto; grid-template-columns: 1fr; } .card { min-height: 500px; } .details { min-height: 500px; } }
+@media (max-width: 850px) { main { height: auto; grid-template-columns: 1fr; } .card { min-height: 500px; } .details { min-height: 500px; } .semantic-mode .results-area { flex-direction: column; } .semantic-mode .semantic-browser { width: 100%; height: 320px; border-right: 0; border-bottom: 1px solid #d8dee5; } }

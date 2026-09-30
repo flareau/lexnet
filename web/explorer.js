@@ -2,7 +2,7 @@ const columns = {
   word: [['entry_name','Entry'], ['std_name','Lexical unit'], ['pos','POS']],
   lf: [['lf_name','Function'], ['source_name','Source'], ['target_name','Target'], ['form','Form']],
   feature: [['entry_name','Entry'], ['std_name','Lexical unit'], ['matching_features','Matching features']],
-  semantic: [['semantic_label_name','Label'], ['entry_name','Entry'], ['std_name','Lexical unit']]
+  semantic: [['semantic_label_name','Label'], ['std_name','Lexical unit']]
 };
 let kind = 'word';
 let currentRows = [];
@@ -118,6 +118,7 @@ function appendLexicalName(parent, label) {
 function selectTab(next) {
   kind = next;
   currentRows = []; sortKey = null; sortAscending = true;
+  document.querySelector('.left').classList.toggle('semantic-mode', kind === 'semantic');
   document.querySelectorAll('.tab').forEach(x => x.classList.toggle('active', x.dataset.kind === kind));
   document.querySelectorAll('.panel').forEach(x => x.classList.toggle('active', x.dataset.kind === kind));
   renderHead(); results.replaceChildren(); status.textContent = 'Ready.';
@@ -434,49 +435,95 @@ async function initialize() {
     chooseFamily('', 'Choose a family…', false);
   });
 
-  const semanticControl = document.querySelector('#semantic-class');
-  const semanticToggle = semanticControl.querySelector('.tree-select-toggle');
-  const semanticMenu = semanticControl.querySelector('.tree-select-menu');
-  const semanticValue = semanticControl.querySelector('input[name=class_id]');
-  const semanticLabel = document.querySelector('#semantic-label');
-  const semanticInput = document.querySelector('#semantic-panel input[name=q]');
-  function chooseSemanticClass(item, clearName=true) {
-    semanticValue.value = item?.id || '';
-    semanticToggle.textContent = item?.name || 'Choose a semantic class…';
-    semanticMenu.hidden = true; semanticToggle.setAttribute('aria-expanded', 'false');
-    if (clearName) semanticInput.value = '';
-    semanticLabel.replaceChildren();
-    const all=document.createElement('option'); all.value='';
-    all.textContent = item ? 'All labels in class' : 'Choose a class first';
-    semanticLabel.append(all);
-    for (const label of item?.labels || []) {
-      const option=document.createElement('option'); option.value=label.id; option.textContent=label.name;
-      semanticLabel.append(option);
-    }
-    semanticLabel.disabled = !item;
+  const semanticForm = document.querySelector('#semantic-panel');
+  const semanticInput = semanticForm.querySelector('input[name=q]');
+  const semanticClassValue = semanticForm.querySelector('input[name=class_id]');
+  const semanticLabelValue = semanticForm.querySelector('input[name=semantic_label_id]');
+  const semanticTree = document.querySelector('#semantic-tree');
+  const rootList = document.createElement('ul');
+  semanticTree.append(rootList);
+  const levelLists = [rootList];
+
+  function selectSemantic(itemType, itemId) {
+    semanticInput.value = '';
+    semanticClassValue.value = itemType === 'semantic_class' ? itemId : '';
+    semanticLabelValue.value = itemType === 'semantic_label' ? itemId : '';
+    semanticTree.querySelectorAll('.selected').forEach(item => item.classList.remove('selected'));
+    semanticTree.querySelectorAll(`[data-item-id="${CSS.escape(itemId)}"]`).forEach(item => item.classList.add('selected'));
+    filterSemanticTree('');
+    semanticForm.requestSubmit();
+    showItem(itemType, itemId);
   }
+
   for (const item of meta.semantic_hierarchy || []) {
-    const button=document.createElement('button');
-    button.type='button'; button.className='tree-select-item semantic-class-item';
-    if (item.semantic_field) button.classList.add('semantic-field-item');
-    button.style.paddingLeft = `${12 + item.depth * 16}px`;
-    button.textContent=item.name; button.setAttribute('role', 'option');
-    button.addEventListener('click', () => chooseSemanticClass(item));
-    semanticMenu.append(button);
-  }
-  semanticToggle.addEventListener('click', () => {
-    semanticMenu.hidden=!semanticMenu.hidden;
-    semanticToggle.setAttribute('aria-expanded', String(!semanticMenu.hidden));
-  });
-  semanticLabel.addEventListener('change', () => { semanticInput.value=''; });
-  semanticInput.addEventListener('input', () => {
-    if (!semanticInput.value) return;
-    chooseSemanticClass(null, false);
-  });
-  document.addEventListener('click', event => {
-    if (!semanticControl.contains(event.target)) {
-      semanticMenu.hidden=true; semanticToggle.setAttribute('aria-expanded', 'false');
+    levelLists.length = item.depth + 1;
+    const parentList = levelLists[item.depth] || rootList;
+    const listItem = document.createElement('li');
+    const details = document.createElement('details');
+    details.open = item.depth < 2;
+    const summary = document.createElement('summary');
+    const button = document.createElement('button');
+    button.type = 'button'; button.className = 'semantic-tree-node';
+    if (item.semantic_field) button.classList.add('semantic-field');
+    button.dataset.itemId = item.id; button.textContent = item.name;
+    button.addEventListener('click', event => {
+      event.preventDefault(); event.stopPropagation(); selectSemantic('semantic_class', item.id);
+    });
+    summary.append(button);
+    if (item.multiple_paths) {
+      const multiple = document.createElement('span');
+      multiple.className = 'semantic-multiple'; multiple.textContent = '⧉';
+      multiple.title = 'Class with multiple parents'; summary.append(multiple);
     }
+    const count = document.createElement('span');
+    count.className = 'semantic-tree-count'; count.textContent = item.count.toLocaleString();
+    summary.append(count);
+    const children = document.createElement('ul');
+    for (const label of item.labels || []) {
+      const labelItem = document.createElement('li');
+      labelItem.className = 'semantic-label-row';
+      const labelButton = document.createElement('button');
+      labelButton.type = 'button'; labelButton.className = 'semantic-tree-node semantic-tree-label';
+      labelButton.dataset.itemId = label.id; labelButton.textContent = label.name;
+      labelButton.addEventListener('click', () => selectSemantic('semantic_label', label.id));
+      const labelCount = document.createElement('span');
+      labelCount.className = 'semantic-tree-count'; labelCount.textContent = label.count.toLocaleString();
+      labelItem.append(labelButton, labelCount); children.append(labelItem);
+    }
+    details.append(summary, children); listItem.append(details); parentList.append(listItem);
+    levelLists[item.depth + 1] = children;
+  }
+
+  function filterSemanticTree(value) {
+    const needle = value.trim().toLocaleLowerCase();
+    const items = [...semanticTree.querySelectorAll('li')];
+    items.forEach(item => { item.hidden = Boolean(needle); });
+    if (!needle) return;
+    for (const button of semanticTree.querySelectorAll('.semantic-tree-node')) {
+      if (!button.textContent.toLocaleLowerCase().includes(needle)) continue;
+      let item = button.closest('li');
+      while (item) {
+        item.hidden = false;
+        const parentDetails = item.parentElement.closest('details');
+        if (parentDetails) parentDetails.open = true;
+        item = item.parentElement.closest('li');
+      }
+    }
+  }
+
+  semanticInput.addEventListener('input', () => {
+    semanticClassValue.value = ''; semanticLabelValue.value = '';
+    semanticTree.querySelectorAll('.selected').forEach(item => item.classList.remove('selected'));
+    filterSemanticTree(semanticInput.value);
+  });
+  semanticForm.elements.descendants.addEventListener('change', () => {
+    if (semanticClassValue.value) semanticForm.requestSubmit();
+  });
+  document.querySelector('#semantic-expand').addEventListener('click', () => {
+    semanticTree.querySelectorAll('details').forEach(item => { item.open = true; });
+  });
+  document.querySelector('#semantic-collapse').addEventListener('click', () => {
+    semanticTree.querySelectorAll('details').forEach(item => { item.open = false; });
   });
 }
 document.querySelectorAll('.tab').forEach(x => x.addEventListener('click', () => selectTab(x.dataset.kind)));
