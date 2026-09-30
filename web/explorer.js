@@ -439,6 +439,9 @@ async function initialize() {
   const semanticInput = semanticForm.querySelector('input[name=q]');
   const semanticClassValue = semanticForm.querySelector('input[name=class_id]');
   const semanticLabelValue = semanticForm.querySelector('input[name=semantic_label_id]');
+  const semanticResults = document.querySelector('.results-area');
+  const semanticBrowser = document.querySelector('#semantic-browser');
+  const semanticResizer = document.querySelector('#semantic-resizer');
   const semanticTree = document.querySelector('#semantic-tree');
   const rootList = document.createElement('ul');
   semanticTree.append(rootList);
@@ -524,6 +527,117 @@ async function initialize() {
   });
   document.querySelector('#semantic-collapse').addEventListener('click', () => {
     semanticTree.querySelectorAll('details').forEach(item => { item.open = false; });
+  });
+
+  function setSemanticBrowserWidth(width, persist=false) {
+    const available = semanticResults.getBoundingClientRect().width;
+    const maximum = Math.max(240, available - 227);
+    const next = Math.min(Math.max(240, width), maximum);
+    semanticResults.style.setProperty('--semantic-tree-width', `${next}px`);
+    semanticResizer.setAttribute('aria-valuenow', String(Math.round(next)));
+    semanticResizer.setAttribute('aria-valuemax', String(Math.round(maximum)));
+    if (persist) {
+      try { localStorage.setItem('lexnet-semantic-tree-width', String(Math.round(next))); }
+      catch (error) { /* Storage may be disabled; resizing still works. */ }
+    }
+  }
+
+  let savedSemanticWidth = 0;
+  try { savedSemanticWidth = Number(localStorage.getItem('lexnet-semantic-tree-width')); }
+  catch (error) { /* Use the CSS default. */ }
+  requestAnimationFrame(() => setSemanticBrowserWidth(
+    savedSemanticWidth > 0 ? savedSemanticWidth : semanticResults.getBoundingClientRect().width * .55,
+  ));
+
+  let resizeStartX = 0;
+  let resizeStartWidth = 0;
+  semanticResizer.addEventListener('pointerdown', event => {
+    resizeStartX = event.clientX;
+    resizeStartWidth = semanticBrowser.getBoundingClientRect().width;
+    semanticResizer.classList.add('dragging');
+    semanticResizer.setPointerCapture(event.pointerId);
+    event.preventDefault();
+  });
+  semanticResizer.addEventListener('pointermove', event => {
+    if (!semanticResizer.hasPointerCapture(event.pointerId)) return;
+    setSemanticBrowserWidth(resizeStartWidth + event.clientX - resizeStartX);
+  });
+  semanticResizer.addEventListener('pointerup', event => {
+    if (!semanticResizer.hasPointerCapture(event.pointerId)) return;
+    semanticResizer.releasePointerCapture(event.pointerId);
+    semanticResizer.classList.remove('dragging');
+    setSemanticBrowserWidth(semanticBrowser.getBoundingClientRect().width, true);
+  });
+  semanticResizer.addEventListener('keydown', event => {
+    if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight') return;
+    const direction = event.key === 'ArrowLeft' ? -1 : 1;
+    setSemanticBrowserWidth(
+      semanticBrowser.getBoundingClientRect().width + direction * (event.shiftKey ? 50 : 20),
+      true,
+    );
+    event.preventDefault();
+  });
+  window.addEventListener('resize', () => {
+    if (kind === 'semantic' && window.innerWidth > 850) {
+      setSemanticBrowserWidth(semanticBrowser.getBoundingClientRect().width);
+    }
+  });
+
+  const main = document.querySelector('main');
+  const browserPane = document.querySelector('.left');
+  const mainResizer = document.querySelector('#main-resizer');
+  function setBrowserPaneWidth(width, persist=false) {
+    const styles = getComputedStyle(main);
+    const available = main.clientWidth
+      - parseFloat(styles.paddingLeft) - parseFloat(styles.paddingRight);
+    const maximum = Math.max(520, available - 356);
+    const next = Math.min(Math.max(520, width), maximum);
+    main.style.setProperty('--browser-pane-width', `${next}px`);
+    mainResizer.setAttribute('aria-valuenow', String(Math.round(next)));
+    mainResizer.setAttribute('aria-valuemax', String(Math.round(maximum)));
+    if (persist) {
+      try { localStorage.setItem('lexnet-browser-pane-width', String(Math.round(next))); }
+      catch (error) { /* Storage may be disabled; resizing still works. */ }
+    }
+  }
+
+  let savedBrowserWidth = 0;
+  try { savedBrowserWidth = Number(localStorage.getItem('lexnet-browser-pane-width')); }
+  catch (error) { /* Use the CSS default. */ }
+  requestAnimationFrame(() => setBrowserPaneWidth(
+    savedBrowserWidth > 0 ? savedBrowserWidth : browserPane.getBoundingClientRect().width,
+  ));
+
+  let mainResizeStartX = 0;
+  let mainResizeStartWidth = 0;
+  mainResizer.addEventListener('pointerdown', event => {
+    mainResizeStartX = event.clientX;
+    mainResizeStartWidth = browserPane.getBoundingClientRect().width;
+    mainResizer.classList.add('dragging');
+    mainResizer.setPointerCapture(event.pointerId);
+    event.preventDefault();
+  });
+  mainResizer.addEventListener('pointermove', event => {
+    if (!mainResizer.hasPointerCapture(event.pointerId)) return;
+    setBrowserPaneWidth(mainResizeStartWidth + event.clientX - mainResizeStartX);
+  });
+  mainResizer.addEventListener('pointerup', event => {
+    if (!mainResizer.hasPointerCapture(event.pointerId)) return;
+    mainResizer.releasePointerCapture(event.pointerId);
+    mainResizer.classList.remove('dragging');
+    setBrowserPaneWidth(browserPane.getBoundingClientRect().width, true);
+  });
+  mainResizer.addEventListener('keydown', event => {
+    if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight') return;
+    const direction = event.key === 'ArrowLeft' ? -1 : 1;
+    setBrowserPaneWidth(
+      browserPane.getBoundingClientRect().width + direction * (event.shiftKey ? 50 : 20),
+      true,
+    );
+    event.preventDefault();
+  });
+  window.addEventListener('resize', () => {
+    if (window.innerWidth > 850) setBrowserPaneWidth(browserPane.getBoundingClientRect().width);
   });
 }
 document.querySelectorAll('.tab').forEach(x => x.addEventListener('click', () => selectTab(x.dataset.kind)));

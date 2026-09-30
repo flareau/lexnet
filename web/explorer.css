@@ -4,8 +4,12 @@ body { margin: 0; }
 header { padding: 16px 24px; background: #17324d; color: white; display: flex; align-items: baseline; gap: 16px; }
 h1 { margin: 0; font-size: 21px; }
 header span { opacity: .75; font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-main { height: calc(100vh - 58px); padding: 16px; display: grid; grid-template-columns: minmax(520px, 3fr) minmax(340px, 2fr); gap: 16px; }
+main { height: calc(100vh - 58px); padding: 16px; display: grid; grid-template-columns: minmax(520px, var(--browser-pane-width, 3fr)) 8px minmax(340px, 2fr); gap: 4px; }
 .card { background: white; border: 1px solid #d8dee5; border-radius: 8px; overflow: hidden; min-height: 0; }
+.main-resizer { position: relative; cursor: col-resize; border-radius: 4px; touch-action: none; }
+.main-resizer::after { content: ''; position: absolute; top: 0; bottom: 0; left: 3px; width: 2px; border-radius: 1px; background: #aeb9c4; opacity: .35; }
+.main-resizer:hover::after, .main-resizer:focus::after, .main-resizer.dragging::after { background: #1683c7; opacity: 1; }
+.main-resizer:focus { outline: 2px solid #1683c7; outline-offset: 1px; }
 .left { display: flex; flex-direction: column; }
 .tabs { display: flex; border-bottom: 1px solid #d8dee5; }
 .tab { border: 0; background: transparent; padding: 13px 17px; cursor: pointer; font-weight: 600; color: #536475; }
@@ -28,9 +32,14 @@ button.search { background: #0878ba; border-color: #0878ba; color: white; cursor
 .options { margin-top: 9px; display: flex; gap: 18px; font-size: 14px; }
 .status { padding: 8px 14px; color: #536475; background: #f7f9fa; border-bottom: 1px solid #d8dee5; font-size: 13px; }
 .results-area { display: flex; flex: 1; min-height: 0; }
-.table-wrap { overflow: auto; flex: 1; }
-.semantic-browser { display: none; width: 330px; min-width: 250px; overflow: hidden; border-right: 1px solid #d8dee5; background: #fbfcfd; }
+.table-wrap { overflow: auto; flex: 1; min-width: 220px; }
+.semantic-browser { display: none; flex: 0 0 var(--semantic-tree-width, 55%); min-width: 240px; overflow: hidden; background: #fbfcfd; }
 .semantic-mode .semantic-browser { display: flex; flex-direction: column; }
+.semantic-resizer { display: none; flex: 0 0 7px; position: relative; cursor: col-resize; background: #f3f5f7; border-right: 1px solid #d8dee5; border-left: 1px solid #d8dee5; touch-action: none; }
+.semantic-mode .semantic-resizer { display: block; }
+.semantic-resizer::after { content: ''; position: absolute; top: 0; bottom: 0; left: 2px; width: 1px; background: #aeb9c4; opacity: 0; }
+.semantic-resizer:hover::after, .semantic-resizer:focus::after, .semantic-resizer.dragging::after { opacity: 1; }
+.semantic-resizer:focus { outline: 2px solid #1683c7; outline-offset: -2px; }
 .semantic-browser-header { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 8px 10px; border-bottom: 1px solid #d8dee5; font-size: 13px; }
 .semantic-browser-header span { display: flex; gap: 4px; }
 .semantic-browser-header button { padding: 2px 5px; border: 0; background: transparent; color: #0878ba; font: inherit; cursor: pointer; }
@@ -95,4 +104,4 @@ tbody tr:hover { background: #edf6fc; }
 .relation-group h3 { margin: 6px 0 2px; font-size: 14px; }
 .relation-group .inspector-list { margin-top: 2px; }
 .relation-group + .relation-group { margin-top: 8px; }
-@media (max-width: 850px) { main { height: auto; grid-template-columns: 1fr; } .card { min-height: 500px; } .details { min-height: 500px; } .semantic-mode .results-area { flex-direction: column; } .semantic-mode .semantic-browser { width: 100%; height: 320px; border-right: 0; border-bottom: 1px solid #d8dee5; } }
+@media (max-width: 850px) { main { height: auto; grid-template-columns: 1fr; gap: 16px; } .main-resizer { display: none; } .card { min-height: 500px; } .details { min-height: 500px; } .semantic-mode .results-area { flex-direction: column; } .semantic-mode .semantic-browser { flex: 0 0 320px; width: 100%; min-width: 0; border-bottom: 1px solid #d8dee5; } .semantic-mode .semantic-resizer { display: none; } }

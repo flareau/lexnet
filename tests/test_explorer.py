@@ -296,6 +296,7 @@ class TestLexnetQueries(unittest.TestCase):
         self.assertIn('explorer.js', page)
         self.assertIn('Semantic labels', page)
         self.assertIn('semantic-browser', page)
+        self.assertIn('main-resizer', page)
         self.assertIn('inspector-section', script)
         self.assertIn("document.createElement('ul')", script)
         self.assertIn('lf-values', script)
