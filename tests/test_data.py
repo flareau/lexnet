@@ -27,11 +27,11 @@ class TestRealDataIntegration(unittest.TestCase):
         self.assertEqual(self.ln['forms'].index.name, 'node_id')
         self.assertEqual(self.ln['labels'].index.name, 'node_id')
         self.assertEqual(self.ln['definitions'].index.name, 'node_id')
-        self.assertEqual(self.ln['examples'].index.name, 'ex_id')
+        self.assertEqual(self.ln['examples'].index.name, 'example_id')
         self.assertEqual(self.ln['feature_names'].index.name, 'feature_id')
-        self.assertEqual(self.ln['form_names'].index.name, 'form_id')
-        self.assertEqual(self.ln['label_names'].index.name, 'label_id')
-        self.assertEqual(self.ln['lf_names'].index.name, 'lf_id')
+        self.assertEqual(self.ln['form_names'].index.name, 'wordform_feature_id')
+        self.assertEqual(self.ln['label_names'].index.name, 'semantic_label_id')
+        self.assertEqual(self.ln['lf_names'].index.name, 'lexical_function_id')
 
     def test_key_columns_present(self):
         self.assertIn('entry_id', self.ln['nodes'].columns)
@@ -39,6 +39,37 @@ class TestRealDataIntegration(unittest.TestCase):
         self.assertIn('std_name', self.ln['nodes'].columns)
         self.assertIn('features', self.ln['features'].columns)
         self.assertIn('propform', self.ln['propforms'].columns)
+
+    def test_single_record_tables_have_unique_indexes(self):
+        tables = {
+            'nodes', 'entries', 'features', 'labels', 'propforms',
+            'definitions', 'examples', 'feature_names', 'form_names',
+            'label_names', 'lf_names',
+        }
+        for table in tables:
+            with self.subTest(table=table):
+                self.assertTrue(self.ln[table].index.is_unique)
+
+    def test_foreign_keys_resolve(self):
+        relations = [
+            ('nodes.entry_id', self.ln['nodes']['entry_id'], self.ln['entries'].index),
+            ('features.node_id', self.ln['features'].index, self.ln['nodes'].index),
+            ('forms.node_id', self.ln['forms'].index, self.ln['nodes'].index),
+            ('labels.node_id', self.ln['labels'].index, self.ln['nodes'].index),
+            ('labels.semantic_label_id', self.ln['labels']['semantic_label_id'], self.ln['label_names'].index),
+            ('propforms.node_id', self.ln['propforms'].index, self.ln['nodes'].index),
+            ('definitions.node_id', self.ln['definitions'].index, self.ln['nodes'].index),
+            ('copolysemy.source_node_id', self.ln['copolysemy']['source_node_id'], self.ln['nodes'].index),
+            ('copolysemy.target_node_id', self.ln['copolysemy']['target_node_id'], self.ln['nodes'].index),
+            ('lfs.source_node_id', self.ln['lfs']['source_node_id'], self.ln['nodes'].index),
+            ('lfs.target_node_id', self.ln['lfs']['target_node_id'], self.ln['nodes'].index),
+            ('lfs.lexical_function_id', self.ln['lfs']['lexical_function_id'], self.ln['lf_names'].index),
+            ('ex-rel.node_id', self.ln['ex-rel']['node_id'], self.ln['nodes'].index),
+            ('ex-rel.example_id', self.ln['ex-rel']['example_id'], self.ln['examples'].index),
+        ]
+        for relation, child_keys, parent_keys in relations:
+            with self.subTest(relation=relation):
+                self.assertTrue(set(child_keys).issubset(set(parent_keys)))
 
 
 if __name__ == '__main__':

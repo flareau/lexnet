@@ -29,6 +29,10 @@ pip install .
 import lexnet as ln
 
 fr = ln.LexicalNetwork("/path/to/data")
+unit = ln.LexicalUnit("ls:fr:node:123", fr)
+
+print(unit.data)
+print(unit.wordforms)
 ```
 
 You can also load raw tables directly:
@@ -38,6 +42,14 @@ from loader import load
 
 tables = load("/path/to/data")
 ```
+
+### ID conventions
+
+Domain objects expose their identifier as `.id`. Function parameters and
+DataFrame fields use explicit names such as `node_id`, `entry_id`,
+`example_id`, `semantic_label_id`, and `lexical_function_id`. Relationship
+fields also identify their role, for example `source_node_id` and
+`target_node_id`.
 
 ## CLI Smoke Test
 

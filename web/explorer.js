@@ -57,7 +57,7 @@ function renderRows() {
       } else if (kind === 'lf' && (key === 'source_name' || key === 'target_name' || (key === 'form' && row.form))) {
         const link=document.createElement('button');
         link.type='button'; link.className='node-link'; link.textContent=row[key] || '';
-        const nodeId = key === 'source_name' ? row.source_id : row.target_id;
+        const nodeId = key === 'source_name' ? row.source_node_id : row.target_node_id;
         link.addEventListener('click', event => { event.stopPropagation(); showItem('node', nodeId); });
         td.append(link);
       } else td.textContent=row[key] || '';

@@ -12,6 +12,9 @@ class LexicalNetwork:
         self.encoding = encoding
         self.data = load(path=path, separator=separator, encoding=encoding)
 
+    def __getitem__(self, table):
+        return self.data[table]
+
 
 class LexicalUnit:
     """Class for a lexical unit (node in the network)."""
@@ -20,7 +23,10 @@ class LexicalUnit:
         self.id = node_id
         self.ln = ln
         self.data = ln['nodes'].loc[node_id]
-        self.features = ln['features'][ln['features'].index == node_id]
+        self.features = ln['features'].loc[node_id]
+        self.wordforms = ln['forms'][ln['forms'].index == node_id]
+        example_ids = ln['ex-rel'].loc[ln['ex-rel'].node_id == node_id, 'example_id']
+        self.examples = ln['examples'].loc[example_ids.tolist()]
 
 
 class LexicalEntry:
@@ -45,19 +51,19 @@ class GrammaticalFeature:
 class SemanticLabel:
     """Semantic labels for lexical units."""
 
-    def __init__(self, label_id, ln):
-        self.id = label_id
+    def __init__(self, semantic_label_id, ln):
+        self.id = semantic_label_id
         self.ln = ln
-        self.data = ln['label_names'].loc[label_id]
+        self.data = ln['label_names'].loc[semantic_label_id]
 
 
 class PropositionalForm:
-    """Propositional forms for lexical units."""
+    """The propositional form for a lexical unit."""
 
-    def __init__(self, form_id, ln):
-        self.id = form_id
+    def __init__(self, node_id, ln):
+        self.id = node_id
         self.ln = ln
-        self.data = ln['propforms'].loc[form_id]
+        self.data = ln['propforms'].loc[node_id]
 
 
 class Definition:
@@ -66,23 +72,22 @@ class Definition:
     def __init__(self, node_id, ln):
         self.id = node_id
         self.ln = ln
-        self.data = ln['definitions'][ln['definitions'].index == node_id]
+        self.data = ln['definitions'].loc[node_id]
 
 
 class LexicalFunction:
     """Lexical functions."""
 
-    def __init__(self, lf_id, ln):
-        self.id = lf_id
+    def __init__(self, lexical_function_id, ln):
+        self.id = lexical_function_id
         self.ln = ln
-        self.data = ln['lf_names'].loc[lf_id]
+        self.data = ln['lf_names'].loc[lexical_function_id]
 
 
 class Example:
-    """Examples for lexical units."""
+    """An example from the lexical network."""
 
-    def __init__(self, node_id, ln):
-        self.id = node_id
+    def __init__(self, example_id, ln):
+        self.id = example_id
         self.ln = ln
-        ex_ids = ln['ex-rel'][ln['ex-rel'].node_id == node_id].ex_id
-        self.data = ln['examples'].loc[ln['examples'].index.intersection(ex_ids)]
+        self.data = ln['examples'].loc[example_id]

@@ -27,8 +27,8 @@ Copolysemy relations
 Nodes of an entry are linked by copolysemy relations.
 
 file   : 04-lscopolysemy-rel.csv
-columns: source,    target,    type,    subtype
-renamed: cp_source, cp_target, cp_type, cp_subtype
+columns: source,         target,         type,    subtype
+renamed: source_node_id, target_node_id, cp_type, cp_subtype
 index  : default
 
 
@@ -57,8 +57,8 @@ Semantic labels
 Semantic labels for the nodes.
 
 file   : '10-lssemlabel-rel.csv'
-columns: node,    label %
-renamed: node_id, label, label_%
+columns: node,    label,            %
+renamed: node_id, semantic_label_id, label_%
 index  : node_id
 
 
@@ -77,8 +77,8 @@ Lexical functions
 Lexical functions for the nodes.
 
 file   : '15-lslf-rel.csv'
-columns: source,    lf, target,    form, separator, merged, syntacticframe, constraint, position
-renamed: source_id, lf_id, target_id, form, separator, merged, frame,          constraint, position
+columns: source,         lf,                  target,         form, separator, merged, syntacticframe, constraint, position
+renamed: source_node_id, lexical_function_id, target_node_id, form, separator, merged, frame,          constraint, position
 index  : default
 
 
@@ -107,9 +107,9 @@ LF names
 Lexical function names from XML.
 
 file   : '14-lslf-model.xml'
-columns: id,    name,    linktype
-renamed: lf_id, lf_name, type
-index  : lf_id
+columns: id,                  name,    linktype
+renamed: lexical_function_id, lf_name, type
+index  : lexical_function_id
 
 
 Examples
@@ -117,9 +117,9 @@ Examples
 Examples linked to lexical units.
 
 file   : '17-lsex.csv'
-columns: id,    source, status, content, title, authors, location, date
-renamed: ex_id, source, status, content, title, authors, location, date
-index  : ex_id
+columns: id,         source, status, content, title, authors, location, date
+renamed: example_id, source, status, content, title, authors, location, date
+index  : example_id
 
 
 Example relations
@@ -127,8 +127,8 @@ Example relations
 Link table from lexical units to examples.
 
 file   : '18-lsex-rel.csv'
-columns: node,    ex,    occurrence, position, %
-renamed: node_id, ex_id, occurrence, position, %
+columns: node,    ex,         occurrence, position, %
+renamed: node_id, example_id, occurrence, position, %
 index  : default
 
 
@@ -166,15 +166,15 @@ DEFAULT_DATA_SOURCES = {
 DEFAULT_COLUMNS = {
     'nodes': ['node_id', 'entry_id', 'lexnum', 'node_status', 'node_%', 'node_update_date', 'node_update_time', 'lexname'],
     'entries': ['entry_id', 'addtoname', 'entry_name', 'subscript', 'superscript', 'entry_status', 'entry_%'],
-    'copolysemy': ['cp_source', 'cp_target', 'cp_type', 'cp_subtype'],
+    'copolysemy': ['source_node_id', 'target_node_id', 'cp_type', 'cp_subtype'],
     'features': ['node_id', 'usage', 'usagevars', 'POS', 'ph_str', 'embeddedlex', 'features', 'featuresvars'],
     'forms': ['node_id', 'features', 'signifier'],
-    'labels': ['node_id', 'label', 'label_%'],
+    'labels': ['node_id', 'semantic_label_id', 'label_%'],
     'propforms': ['node_id', 'propform', 'tildevalue', 'propform_confid', 'actants'],
-    'lfs': ['source_id', 'lf_id', 'target_id', 'form', 'separator', 'merged', 'frame', 'constraint', 'position'],
+    'lfs': ['source_node_id', 'lexical_function_id', 'target_node_id', 'form', 'separator', 'merged', 'frame', 'constraint', 'position'],
     'definitions': ['node_id', 'def_XML', 'def_HTML'],
-    'examples': ['ex_id', 'source', 'status', 'content', 'title', 'authors', 'location', 'date'],
-    'ex-rel': ['node_id', 'ex_id', 'occurrence', 'position', '%'],
+    'examples': ['example_id', 'source', 'status', 'content', 'title', 'authors', 'location', 'date'],
+    'ex-rel': ['node_id', 'example_id', 'occurrence', 'position', '%'],
 }
 
 
@@ -208,7 +208,7 @@ def load_feature_names(file, path, encoding=DEFAULT_ENCODING):
 def load_form_names(file, path, encoding=DEFAULT_ENCODING):
     xml = load_xml(file=file, path=path, encoding=encoding)
     form_names = pd.DataFrame([
-        {'form_id': tag.get('id'), 'name': tag.get('name')}
+        {'wordform_feature_id': tag.get('id'), 'name': tag.get('name')}
         for tag in xml.iter('feature')
     ])
     print_imported(form_names, file, items='wordform features')
@@ -218,9 +218,14 @@ def load_form_names(file, path, encoding=DEFAULT_ENCODING):
 def load_label_names(file, path, encoding=DEFAULT_ENCODING):
     xml = load_xml(file=file, path=path, encoding=encoding)
     label_names = pd.DataFrame([
-        {'label_id': tag.get('id'), 'name': tag.get('name')}
+        {'semantic_label_id': tag.get('id'), 'name': tag.get('name')}
         for tag in xml.iter('instance')
     ])
+    name_counts = label_names.groupby('semantic_label_id', dropna=False)['name'].nunique(dropna=False)
+    conflicting_ids = name_counts[name_counts > 1].index.tolist()
+    if conflicting_ids:
+        raise ValueError(f'Conflicting names for semantic label IDs: {conflicting_ids}')
+    label_names.drop_duplicates('semantic_label_id', inplace=True)
     print_imported(label_names, file, items='semantic labels')
     return label_names
 
@@ -232,7 +237,7 @@ def load_lf_names(file, path, encoding=DEFAULT_ENCODING):
         for family_index, family in enumerate(group.findall('family'), start=1):
             for lf_index, tag in enumerate(family.findall('lexicalfunction'), start=1):
                 rows.append({
-                    'lf_id': tag.get('id'),
+                    'lexical_function_id': tag.get('id'),
                     'lf_name': tag.get('name'),
                     'type': tag.get('linktype'),
                     'family_id': family.get('id'),
@@ -266,11 +271,12 @@ def normalize_propforms(propform):
 
 def to_list(text):
     """Convert a LN list such as '(ls:fr:gc:26,ls:fr:gc:73)' to a Python list."""
-    if isinstance(text, str):
-        assert text[0] == '('
-        assert text[-1] == ')'
-        return text[1:-1].split(',')
-    return []
+    if not isinstance(text, str):
+        return []
+    if len(text) < 2 or not text.startswith('(') or not text.endswith(')'):
+        raise ValueError(f'Invalid LexNet list: {text!r}')
+    content = text[1:-1]
+    return content.split(',') if content else []
 
 
 def load(path, sources=None, columns=None, separator=DEFAULT_SEPARATOR, encoding=DEFAULT_ENCODING):
@@ -293,7 +299,7 @@ def load(path, sources=None, columns=None, separator=DEFAULT_SEPARATOR, encoding
     ln['forms'].set_index('node_id', inplace=True)
     ln['labels'].set_index('node_id', inplace=True)
     ln['definitions'].set_index('node_id', inplace=True)
-    ln['examples'].set_index('ex_id', inplace=True)
+    ln['examples'].set_index('example_id', inplace=True)
 
     ln['nodes']['std_name'] = ln['nodes'].apply(lambda row: std_name(row.lexname), axis=1)
 
@@ -306,10 +312,10 @@ def load(path, sources=None, columns=None, separator=DEFAULT_SEPARATOR, encoding
     ln['feature_names'] = load_feature_names(file=sources['feature_names'], path=path, encoding=encoding)
     ln['feature_names'].set_index('feature_id', inplace=True)
     ln['form_names'] = load_form_names(file=sources['form_names'], path=path, encoding=encoding)
-    ln['form_names'].set_index('form_id', inplace=True)
+    ln['form_names'].set_index('wordform_feature_id', inplace=True)
     ln['label_names'] = load_label_names(file=sources['label_names'], path=path, encoding=encoding)
-    ln['label_names'].set_index('label_id', inplace=True)
+    ln['label_names'].set_index('semantic_label_id', inplace=True)
     ln['lf_names'] = load_lf_names(file=sources['lf_names'], path=path, encoding=encoding)
-    ln['lf_names'].set_index('lf_id', inplace=True)
+    ln['lf_names'].set_index('lexical_function_id', inplace=True)
 
     return ln

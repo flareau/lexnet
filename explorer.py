@@ -76,12 +76,12 @@ def create_server(queries, data_path, host='127.0.0.1', port=0):
                 count = result.entry_id.nunique()
                 summary = f'{len(result):,} lexical units in {count:,} entries.'
             elif kind == 'lf':
-                lf_id = self._param(params, 'lf_id')
+                lexical_function_id = self._param(params, 'lexical_function_id')
                 family_id = self._param(params, 'family_id')
                 if query:
                     result = queries.search_lexical_functions(query)
-                elif lf_id:
-                    result = queries.search_lexical_function_ids([lf_id])
+                elif lexical_function_id:
+                    result = queries.search_lexical_function_ids([lexical_function_id])
                 elif family_id.startswith('group:'):
                     result = queries.search_lexical_function_ids(
                         queries.lexical_function_ids_for_group(int(family_id.removeprefix('group:')))

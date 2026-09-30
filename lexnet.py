@@ -19,7 +19,17 @@ from loader import (
     std_name,
     to_list,
 )
-from models import GrammaticalFeature, LexicalEntry, LexicalNetwork, LexicalUnit
+from models import (
+    Definition,
+    Example,
+    GrammaticalFeature,
+    LexicalEntry,
+    LexicalFunction,
+    LexicalNetwork,
+    LexicalUnit,
+    PropositionalForm,
+    SemanticLabel,
+)
 
 
 __all__ = [
@@ -27,10 +37,15 @@ __all__ = [
     'DEFAULT_DATA_SOURCES',
     'DEFAULT_ENCODING',
     'DEFAULT_SEPARATOR',
+    'Definition',
+    'Example',
     'GrammaticalFeature',
     'LexicalEntry',
+    'LexicalFunction',
     'LexicalNetwork',
     'LexicalUnit',
+    'PropositionalForm',
+    'SemanticLabel',
     'load',
     'load_csv',
     'load_feature_names',

@@ -23,9 +23,15 @@ class TestModels(unittest.TestCase):
             ).set_index('entry_id'),
             'features': pd.DataFrame(
                 [
-                    {'node_id': 'n1', 'usage': '', 'usagevars': '', 'POS': 'N', 'ph_str': '', 'embeddedlex': '', 'features': ['f1'], 'featuresvars': ''},
-                    {'node_id': 'n1', 'usage': '', 'usagevars': '', 'POS': 'N', 'ph_str': '', 'embeddedlex': '', 'features': ['f2'], 'featuresvars': ''},
+                    {'node_id': 'n1', 'usage': '', 'usagevars': '', 'POS': 'N', 'ph_str': '', 'embeddedlex': '', 'features': ['f1', 'f2'], 'featuresvars': ''},
                     {'node_id': 'n2', 'usage': '', 'usagevars': '', 'POS': 'V', 'ph_str': '', 'embeddedlex': '', 'features': ['f3'], 'featuresvars': ''},
+                ]
+            ).set_index('node_id'),
+            'forms': pd.DataFrame(
+                [
+                    {'node_id': 'n1', 'features': '(plural)', 'signifier': 'alphas'},
+                    {'node_id': 'n1', 'features': '(singular)', 'signifier': 'alpha'},
+                    {'node_id': 'n2', 'features': '(present)', 'signifier': 'beta'},
                 ]
             ).set_index('node_id'),
             'feature_names': pd.DataFrame(
@@ -36,14 +42,14 @@ class TestModels(unittest.TestCase):
             ).set_index('feature_id'),
             'label_names': pd.DataFrame(
                 [
-                    {'label_id': 'sl1', 'name': 'Label One'},
-                    {'label_id': 'sl2', 'name': 'Label Two'},
+                    {'semantic_label_id': 'sl1', 'name': 'Label One'},
+                    {'semantic_label_id': 'sl2', 'name': 'Label Two'},
                 ]
-            ).set_index('label_id'),
+            ).set_index('semantic_label_id'),
             'labels': pd.DataFrame(
                 [
-                    {'node_id': 'n1', 'label': 'sl1', 'label_%': 100},
-                    {'node_id': 'n2', 'label': 'sl2', 'label_%': 100},
+                    {'node_id': 'n1', 'semantic_label_id': 'sl1', 'label_%': 100},
+                    {'node_id': 'n2', 'semantic_label_id': 'sl2', 'label_%': 100},
                 ]
             ).set_index('node_id'),
             'propforms': pd.DataFrame(
@@ -60,21 +66,21 @@ class TestModels(unittest.TestCase):
             ).set_index('node_id'),
             'lf_names': pd.DataFrame(
                 [
-                    {'lf_id': 'lf1', 'lf_name': 'Magn', 'type': 'standard'},
-                    {'lf_id': 'lf2', 'lf_name': 'Oper1', 'type': 'standard'},
+                    {'lexical_function_id': 'lf1', 'lf_name': 'Magn', 'type': 'standard'},
+                    {'lexical_function_id': 'lf2', 'lf_name': 'Oper1', 'type': 'standard'},
                 ]
-            ).set_index('lf_id'),
+            ).set_index('lexical_function_id'),
             'examples': pd.DataFrame(
                 [
-                    {'ex_id': 'x1', 'source': 'src', 'status': 'ok', 'content': 'example 1', 'title': '', 'authors': '', 'location': '', 'date': ''},
-                    {'ex_id': 'x2', 'source': 'src', 'status': 'ok', 'content': 'example 2', 'title': '', 'authors': '', 'location': '', 'date': ''},
+                    {'example_id': 'x1', 'source': 'src', 'status': 'ok', 'content': 'example 1', 'title': '', 'authors': '', 'location': '', 'date': ''},
+                    {'example_id': 'x2', 'source': 'src', 'status': 'ok', 'content': 'example 2', 'title': '', 'authors': '', 'location': '', 'date': ''},
                 ]
-            ).set_index('ex_id'),
+            ).set_index('example_id'),
             'ex-rel': pd.DataFrame(
                 [
-                    {'node_id': 'n1', 'ex_id': 'x1', 'occurrence': 1, 'position': 1, '%': 100},
-                    {'node_id': 'n1', 'ex_id': 'x2', 'occurrence': 1, 'position': 2, '%': 100},
-                    {'node_id': 'n2', 'ex_id': 'x2', 'occurrence': 1, 'position': 1, '%': 100},
+                    {'node_id': 'n1', 'example_id': 'x1', 'occurrence': 1, 'position': 1, '%': 100},
+                    {'node_id': 'n1', 'example_id': 'x2', 'occurrence': 1, 'position': 2, '%': 100},
+                    {'node_id': 'n2', 'example_id': 'x2', 'occurrence': 1, 'position': 1, '%': 100},
                 ]
             ),
         }
@@ -88,14 +94,20 @@ class TestModels(unittest.TestCase):
         self.assertEqual(network.separator, ';')
         self.assertEqual(network.encoding, 'latin1')
         self.assertIs(network.data, self.ln)
+        self.assertIs(network['nodes'], self.ln['nodes'])
+
+        unit = models.LexicalUnit(node_id='n1', ln=network)
+        self.assertEqual(unit.data['lexname'], 'alpha')
 
     def test_lexical_unit_selects_node_and_features(self):
         unit = models.LexicalUnit(node_id='n1', ln=self.ln)
 
         self.assertEqual(unit.id, 'n1')
         self.assertEqual(unit.data['lexname'], 'alpha')
-        self.assertEqual(len(unit.features), 2)
-        self.assertEqual(set(unit.features['POS']), {'N'})
+        self.assertEqual(unit.features['POS'], 'N')
+        self.assertEqual(unit.features['features'], ['f1', 'f2'])
+        self.assertEqual(unit.wordforms['signifier'].tolist(), ['alphas', 'alpha'])
+        self.assertEqual(set(unit.examples.index), {'x1', 'x2'})
 
     def test_lexical_entry_selects_entry_and_senses(self):
         entry = models.LexicalEntry(entry_id='e1', ln=self.ln)
@@ -111,35 +123,34 @@ class TestModels(unittest.TestCase):
         self.assertEqual(feature.data['name'], 'gender')
 
     def test_semantic_label_selects_label_name(self):
-        label = models.SemanticLabel(label_id='sl1', ln=self.ln)
+        label = models.SemanticLabel(semantic_label_id='sl1', ln=self.ln)
 
         self.assertEqual(label.id, 'sl1')
         self.assertEqual(label.data['name'], 'Label One')
 
     def test_propositional_form_selects_form(self):
-        prop = models.PropositionalForm(form_id='n2', ln=self.ln)
+        prop = models.PropositionalForm(node_id='n2', ln=self.ln)
 
         self.assertEqual(prop.id, 'n2')
         self.assertEqual(prop.data['propform'], 'X has Y')
 
-    def test_definition_filters_by_node_id(self):
+    def test_definition_selects_definition_by_node_id(self):
         definition = models.Definition(node_id='n2', ln=self.ln)
 
         self.assertEqual(definition.id, 'n2')
-        self.assertEqual(len(definition.data), 1)
-        self.assertEqual(definition.data.iloc[0]['def_HTML'], '<p>def 2</p>')
+        self.assertEqual(definition.data['def_HTML'], '<p>def 2</p>')
 
     def test_lexical_function_selects_lf_name(self):
-        lf = models.LexicalFunction(lf_id='lf1', ln=self.ln)
+        lf = models.LexicalFunction(lexical_function_id='lf1', ln=self.ln)
 
         self.assertEqual(lf.id, 'lf1')
         self.assertEqual(lf.data['lf_name'], 'Magn')
 
-    def test_example_selects_examples_for_node(self):
-        example = models.Example(node_id='n1', ln=self.ln)
+    def test_example_selects_example_by_id(self):
+        example = models.Example(example_id='x1', ln=self.ln)
 
-        self.assertEqual(example.id, 'n1')
-        self.assertEqual(set(example.data.index.tolist()), {'x1', 'x2'})
+        self.assertEqual(example.id, 'x1')
+        self.assertEqual(example.data['content'], 'example 1')
 
 
 if __name__ == '__main__':

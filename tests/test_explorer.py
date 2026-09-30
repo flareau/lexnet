@@ -25,7 +25,7 @@ class TestLexnetQueries(unittest.TestCase):
                 {'node_id': 'n1', 'features': 'plural', 'signifier': 'chats'},
             ]).set_index('node_id'),
             'features': pd.DataFrame([
-                {'node_id': 'n1', 'POS': 'N', 'ph_str': '', 'usage': '', 'features': ['f_noun']},
+                {'node_id': 'n1', 'POS': 'f_noun', 'ph_str': '', 'usage': '', 'features': []},
                 {'node_id': 'n3', 'POS': 'V', 'ph_str': 'idiom', 'usage': '', 'features': ['f_idiom']},
                 {'node_id': 'n3', 'POS': 'V', 'ph_str': 'idiom', 'usage': '', 'features': ['f_verbal']},
             ]).set_index('node_id'),
@@ -35,23 +35,23 @@ class TestLexnetQueries(unittest.TestCase):
                 {'feature_id': 'f_verbal', 'name': 'verbal expression'},
             ]).set_index('feature_id'),
             'label_names': pd.DataFrame([
-                {'label_id': 'sl1', 'name': 'Label One'},
-            ]).set_index('label_id'),
+                {'semantic_label_id': 'sl1', 'name': 'Label One'},
+            ]).set_index('semantic_label_id'),
             'lf_names': pd.DataFrame([
-                {'lf_id': 'lf1', 'lf_name': 'Magn', 'type': 'standard', 'family_id': 'fam1', 'family_name': 'Intensity', 'group_index': 1, 'family_index': 1, 'lf_index': 1},
-                {'lf_id': 'lf2', 'lf_name': 'Oper1', 'type': 'standard', 'family_id': 'fam2', 'family_name': 'Support verbs', 'group_index': 2, 'family_index': 1, 'lf_index': 1},
-            ]).set_index('lf_id'),
+                {'lexical_function_id': 'lf1', 'lf_name': 'Magn', 'type': 'standard', 'family_id': 'fam1', 'family_name': 'Intensity', 'group_index': 1, 'family_index': 1, 'lf_index': 1},
+                {'lexical_function_id': 'lf2', 'lf_name': 'Oper1', 'type': 'standard', 'family_id': 'fam2', 'family_name': 'Support verbs', 'group_index': 2, 'family_index': 1, 'lf_index': 1},
+            ]).set_index('lexical_function_id'),
             'lfs': pd.DataFrame([
-                {'source_id': 'n1', 'lf_id': 'lf1', 'target_id': 'n2', 'form': '', 'frame': '', 'constraint': ''},
-                {'source_id': 'n3', 'lf_id': 'lf2', 'target_id': 'n1', 'form': 'prendre', 'frame': '', 'constraint': ''},
+                {'source_node_id': 'n1', 'lexical_function_id': 'lf1', 'target_node_id': 'n2', 'form': '', 'frame': '', 'constraint': ''},
+                {'source_node_id': 'n3', 'lexical_function_id': 'lf2', 'target_node_id': 'n1', 'form': 'prendre', 'frame': '', 'constraint': ''},
             ]),
             'definitions': pd.DataFrame(columns=['node_id', 'def_HTML']).set_index('node_id'),
             'labels': pd.DataFrame([
-                {'node_id': 'n1', 'label': 'sl1'},
+                {'node_id': 'n1', 'semantic_label_id': 'sl1'},
             ]).set_index('node_id'),
             'propforms': pd.DataFrame(columns=['node_id', 'propform']).set_index('node_id'),
-            'examples': pd.DataFrame(columns=['ex_id', 'content']).set_index('ex_id'),
-            'ex-rel': pd.DataFrame(columns=['node_id', 'ex_id']),
+            'examples': pd.DataFrame(columns=['example_id', 'content']).set_index('example_id'),
+            'ex-rel': pd.DataFrame(columns=['node_id', 'example_id']),
         }
         self.queries = LexnetQueries(self.data)
 
@@ -111,7 +111,7 @@ class TestLexnetQueries(unittest.TestCase):
         payload = self.queries.inspector_payload('entry', 'e1')
         self.assertEqual(payload['title'], 'Lexical entry')
         self.assertEqual({link['item_id'] for link in payload['links']}, {'n1', 'n2'})
-        self.assertIn('chat I  [N; noun]', payload['description'])
+        self.assertIn('chat I  [noun]', payload['description'])
 
     def test_node_inspector_links_back_to_its_entry(self):
         payload = self.queries.inspector_payload('node', 'n1')

@@ -10,7 +10,7 @@ EMPTY_WORD_RESULTS = [
     'entry_id', 'entry_name', 'node_id', 'std_name', 'pos', 'match_source'
 ]
 EMPTY_LF_RESULTS = [
-    'lf_name', 'source_id', 'source_name', 'target_id', 'target_name',
+    'lf_name', 'source_node_id', 'source_name', 'target_node_id', 'target_name',
     'form', 'frame', 'constraint'
 ]
 EMPTY_FEATURE_RESULTS = [
@@ -134,26 +134,28 @@ class LexnetQueries:
 
     def search_lexical_functions(self, names):
         """Return source/target occurrences for one or more LF names."""
-        lf_ids = self._resolve_names(split_query(names), self.lf_names)
-        return self.search_lexical_function_ids(lf_ids)
+        lexical_function_ids = self._resolve_names(split_query(names), self.lf_names)
+        return self.search_lexical_function_ids(lexical_function_ids)
 
-    def search_lexical_function_ids(self, lf_ids):
+    def search_lexical_function_ids(self, lexical_function_ids):
         """Return source/target occurrences for LF IDs."""
-        lf_ids = set(lf_ids)
+        lexical_function_ids = set(lexical_function_ids)
         relations = self.data.get('lfs')
-        if not lf_ids or relations is None or relations.empty:
+        if not lexical_function_ids or relations is None or relations.empty:
             return pd.DataFrame(columns=EMPTY_LF_RESULTS)
 
         rows = []
-        for _, relation in relations[relations['lf_id'].isin(lf_ids)].iterrows():
-            source_id = relation['source_id']
-            target_id = relation['target_id']
+        matching = relations[relations['lexical_function_id'].isin(lexical_function_ids)]
+        for _, relation in matching.iterrows():
+            source_node_id = relation['source_node_id']
+            target_node_id = relation['target_node_id']
+            lexical_function_id = relation['lexical_function_id']
             rows.append({
-                'lf_name': self.lf_names.get(relation['lf_id'], _text(relation['lf_id'])),
-                'source_id': source_id,
-                'source_name': self.node_names.get(source_id, _text(source_id)),
-                'target_id': target_id,
-                'target_name': self.node_names.get(target_id, _text(target_id)),
+                'lf_name': self.lf_names.get(lexical_function_id, _text(lexical_function_id)),
+                'source_node_id': source_node_id,
+                'source_name': self.node_names.get(source_node_id, _text(source_node_id)),
+                'target_node_id': target_node_id,
+                'target_name': self.node_names.get(target_node_id, _text(target_node_id)),
                 'form': _text(relation.get('form')),
                 'frame': _text(relation.get('frame')),
                 'constraint': _text(relation.get('constraint')),
@@ -188,8 +190,8 @@ class LexnetQueries:
                     'id': _text(family_id),
                     'name': _text(family_rows.iloc[0]['family_name']),
                     'functions': [
-                        {'id': _text(lf_id), 'name': _text(row['lf_name'])}
-                        for lf_id, row in family_rows.iterrows()
+                        {'id': _text(lexical_function_id), 'name': _text(row['lf_name'])}
+                        for lexical_function_id, row in family_rows.iterrows()
                     ],
                 })
             groups.append({'index': int(group_index), 'families': families})
@@ -204,9 +206,11 @@ class LexnetQueries:
 
         by_node = {}
         for node_id, row in features.iterrows():
-            values = row.get('features', [])
-            if not isinstance(values, (list, tuple, set)):
-                values = []
+            feature_values = row.get('features', [])
+            values = set(feature_values) if isinstance(feature_values, (list, tuple, set)) else set()
+            pos = row.get('POS')
+            if _text(pos):
+                values.add(pos)
             by_node.setdefault(node_id, set()).update(values)
 
         rows = []
@@ -281,8 +285,8 @@ class LexnetQueries:
         ex_rel = self.data.get('ex-rel')
         examples = self.data.get('examples')
         if ex_rel is not None and examples is not None and not ex_rel.empty:
-            ex_ids = ex_rel.loc[ex_rel['node_id'] == node_id, 'ex_id']
-            matching_examples = examples.loc[examples.index.intersection(ex_ids)]
+            example_ids = ex_rel.loc[ex_rel['node_id'] == node_id, 'example_id']
+            matching_examples = examples.loc[examples.index.intersection(example_ids)]
             if not matching_examples.empty:
                 lines.extend(['', 'EXAMPLES'])
                 for _, row in matching_examples.iterrows():
@@ -378,21 +382,23 @@ class LexnetQueries:
         if relations is None or relations.empty:
             return []
         links = []
-        outgoing = relations[relations['source_id'] == node_id]
-        incoming = relations[relations['target_id'] == node_id]
+        outgoing = relations[relations['source_node_id'] == node_id]
+        incoming = relations[relations['target_node_id'] == node_id]
         for _, row in outgoing.iterrows():
-            name = self.node_names.get(row['target_id'], _text(row['target_id']))
-            prefix = f" → {self.lf_names.get(row['lf_id'], row['lf_id'])}: "
+            name = self.node_names.get(row['target_node_id'], _text(row['target_node_id']))
+            function_id = row['lexical_function_id']
+            prefix = f" → {self.lf_names.get(function_id, function_id)}: "
             links.append({
                 'line': prefix + name, 'prefix': prefix, 'suffix': '',
-                'item_type': 'node', 'item_id': _text(row['target_id']), 'item_name': name,
+                'item_type': 'node', 'item_id': _text(row['target_node_id']), 'item_name': name,
             })
         for _, row in incoming.iterrows():
-            name = self.node_names.get(row['source_id'], _text(row['source_id']))
-            prefix = f" ← {self.lf_names.get(row['lf_id'], row['lf_id'])}: "
+            name = self.node_names.get(row['source_node_id'], _text(row['source_node_id']))
+            function_id = row['lexical_function_id']
+            prefix = f" ← {self.lf_names.get(function_id, function_id)}: "
             links.append({
                 'line': prefix + name, 'prefix': prefix, 'suffix': '',
-                'item_type': 'node', 'item_id': _text(row['source_id']), 'item_name': name,
+                'item_type': 'node', 'item_id': _text(row['source_node_id']), 'item_name': name,
             })
         return links
 
@@ -416,8 +422,8 @@ class LexnetQueries:
         rows = _rows_for_index(self.data.get('labels'), node_id)
         rendered = []
         for _, row in rows.iterrows():
-            label_id = row.get('label')
-            name = self.label_names.get(label_id, 'Unknown semantic label')
+            semantic_label_id = row.get('semantic_label_id')
+            name = self.label_names.get(semantic_label_id, 'Unknown semantic label')
             if name:
                 rendered.append(' • ' + name)
         if rendered:
@@ -436,4 +442,3 @@ class LexnetQueries:
                 rendered.append(' • ' + value)
         if rendered:
             lines.extend(['', title, *rendered])
-
