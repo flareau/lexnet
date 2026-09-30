@@ -46,6 +46,8 @@ tbody tr:hover { background: #edf6fc; }
 .lf-values { display: inline; margin: 0; padding: 0; list-style: none; }
 .lf-values li { display: inline; }
 .lf-values li:not(:last-child)::after { content: ', '; }
+.lf-name { font-family: "STIX Two Math", "Cambria Math", "Latin Modern Math", "Times New Roman", serif; font-size: 1.05em; }
+.lf-name sub, .lf-name sup { font-size: .72em; line-height: 0; }
 .relation-group h3 { margin: 6px 0 2px; font-size: 14px; }
 .relation-group .inspector-list { margin-top: 2px; }
 .relation-group + .relation-group { margin-top: 8px; }

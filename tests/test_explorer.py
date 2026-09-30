@@ -105,6 +105,7 @@ class TestLexnetQueries(unittest.TestCase):
         links = self.queries.lexical_function_links('n1')
         magn = links[0]
         self.assertEqual(magn['line'], 'Magn: chat II, prendre le large')
+        self.assertEqual(magn['function_name'], 'Magn')
         self.assertEqual(magn['direction'], 'Outgoing')
         self.assertEqual([item['item_id'] for item in magn['items']], ['n2', 'n3'])
         self.assertEqual(magn['line'].count('Magn'), 1)
@@ -135,6 +136,9 @@ class TestLexnetQueries(unittest.TestCase):
         self.assertIn('inspector-section', script)
         self.assertIn("document.createElement('ul')", script)
         self.assertIn('lf-values', script)
+        self.assertIn('lf-name', script)
+        self.assertIn("atomicLfNames = ['De_nouveau']", script)
+        self.assertIn("document.createElement(marker === '_' ? 'sub' : 'sup')", script)
 
     def test_local_server_serves_page_and_search_api(self):
         server = create_server(self.queries, '/tmp/example')

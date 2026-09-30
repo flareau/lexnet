@@ -405,6 +405,7 @@ class LexnetQueries:
                     'line': prefix + ', '.join(item['item_name'] for item in items),
                     'prefix': prefix,
                     'suffix': '',
+                    'function_name': _text(function_name),
                     'items': items,
                     'direction': direction,
                 })

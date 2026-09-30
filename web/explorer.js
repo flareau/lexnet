@@ -12,6 +12,53 @@ const status = document.querySelector('#status');
 const results = document.querySelector('#results');
 const head = document.querySelector('#head');
 
+const atomicLfNames = ['De_nouveau'];
+
+function appendLfName(parent, name) {
+  const container = document.createElement('span');
+  container.className = 'lf-name';
+  let plainText = '';
+  const flushText = () => {
+    if (!plainText) return;
+    container.append(document.createTextNode(plainText));
+    plainText = '';
+  };
+  for (let index = 0; index < name.length;) {
+    const atom = atomicLfNames.find(candidate => name.startsWith(candidate, index));
+    if (atom) {
+      plainText += atom;
+      index += atom.length;
+      continue;
+    }
+    const marker = name[index];
+    if (marker !== '_' && marker !== '^') {
+      plainText += marker;
+      index += 1;
+      continue;
+    }
+    flushText();
+    index += 1;
+    let end = index;
+    if (marker === '^') {
+      const roman = name.slice(index).match(/^(?:I\/II|III|II|I)(?![a-z])/);
+      if (roman) end += roman[0].length;
+    }
+    if (end === index) {
+      while (end < name.length) {
+        const character = name[end];
+        if (character === '_' || character === '^' || character === '•' || /[A-Z]/.test(character)) break;
+        end += 1;
+      }
+    }
+    const script = document.createElement(marker === '_' ? 'sub' : 'sup');
+    script.textContent = name.slice(index, end).trimEnd();
+    container.append(script);
+    index = end;
+  }
+  flushText();
+  parent.append(container);
+}
+
 function selectTab(next) {
   kind = next;
   currentRows = []; sortKey = null; sortAscending = true;
@@ -60,6 +107,8 @@ function renderRows() {
         const nodeId = key === 'source_name' ? row.source_node_id : row.target_node_id;
         link.addEventListener('click', event => { event.stopPropagation(); showItem('node', nodeId); });
         td.append(link);
+      } else if (kind === 'lf' && key === 'lf_name') {
+        appendLfName(td, row[key] || '');
       } else td.textContent=row[key] || '';
       tr.append(td);
     }
@@ -109,9 +158,14 @@ function renderDetails(payload) {
     const choices = links.get(line);
     const relation = choices && choices.shift();
     if (relation) {
-      const prefix = removeBullet && relation.prefix.startsWith(' • ')
-        ? relation.prefix.slice(3) : relation.prefix;
-      parent.append(document.createTextNode(prefix));
+      if (relation.function_name) {
+        appendLfName(parent, relation.function_name);
+        parent.append(document.createTextNode(': '));
+      } else {
+        const prefix = removeBullet && relation.prefix.startsWith(' • ')
+          ? relation.prefix.slice(3) : relation.prefix;
+        parent.append(document.createTextNode(prefix));
+      }
       if (relation.items) {
         const list = document.createElement('ul'); list.className = 'lf-values';
         for (const item of relation.items) {
