@@ -35,8 +35,22 @@ class TestLexnetQueries(unittest.TestCase):
                 {'feature_id': 'f_verbal', 'name': 'verbal expression'},
             ]).set_index('feature_id'),
             'label_names': pd.DataFrame([
-                {'semantic_label_id': 'sl1', 'name': 'Label One'},
+                {
+                    'semantic_label_id': 'sl1', 'name': 'Label One',
+                    'status': '1', 'derivation': '---', 'actant_type': '0',
+                    'comment': 'A label comment',
+                },
             ]).set_index('semantic_label_id'),
+            'label_classes': pd.DataFrame([
+                {'semantic_class_id': 'c0', 'name': 'QQCH.', 'semantic_field': '0', 'inheritance_type': '0', 'comment': ''},
+                {'semantic_class_id': 'c1', 'name': 'ENTITÉ', 'semantic_field': '1', 'inheritance_type': '0', 'comment': 'Things'},
+            ]).set_index('semantic_class_id'),
+            'label_class_edges': pd.DataFrame([
+                {'parent_class_id': 'c0', 'child_class_id': 'c1'},
+            ]),
+            'label_memberships': pd.DataFrame([
+                {'semantic_class_id': 'c1', 'semantic_label_id': 'sl1'},
+            ]),
             'lf_names': pd.DataFrame([
                 {'lexical_function_id': 'lf1', 'lf_name': 'Magn', 'type': 'standard', 'family_id': 'fam1', 'family_name': 'Intensity', 'group_index': 1, 'family_index': 1, 'lf_index': 1},
                 {'lexical_function_id': 'lf2', 'lf_name': 'Oper1', 'type': 'standard', 'family_id': 'fam2', 'family_name': 'Support verbs', 'group_index': 2, 'family_index': 1, 'lf_index': 1},
@@ -99,6 +113,31 @@ class TestLexnetQueries(unittest.TestCase):
         all_result = self.queries.search_features('idiom, verbal expression', require_all=True)
         self.assertEqual(set(any_result.node_id), {'n1', 'n3'})
         self.assertEqual(all_result.node_id.tolist(), ['n3'])
+
+    def test_semantic_label_search_supports_labels_and_class_descendants(self):
+        by_label = self.queries.search_semantic_labels(query='Label One')
+        by_root = self.queries.search_semantic_labels(class_id='c0', include_descendants=True)
+        direct_root = self.queries.search_semantic_labels(class_id='c0', include_descendants=False)
+
+        self.assertEqual(by_label.node_id.tolist(), ['n1'])
+        self.assertEqual(by_root.semantic_label_id.tolist(), ['sl1'])
+        self.assertTrue(direct_root.empty)
+        self.assertEqual(by_label.iloc[0].confidence, 90)
+
+    def test_semantic_hierarchy_and_inspectors_are_navigable(self):
+        hierarchy = self.queries.semantic_class_hierarchy()
+        self.assertEqual([(item['name'], item['depth']) for item in hierarchy], [
+            ('QQCH.', 0), ('ENTITÉ', 1),
+        ])
+        label_payload = self.queries.inspector_payload('semantic_label', 'sl1')
+        class_payload = self.queries.inspector_payload('semantic_class', 'c1')
+        self.assertIn('Derivation: ---', label_payload['description'])
+        self.assertEqual(label_payload['links'][0]['item_id'], 'c1')
+        self.assertIn('Inheritance: simple', class_payload['description'])
+        self.assertEqual(
+            {link['item_type'] for link in class_payload['links']},
+            {'semantic_class', 'semantic_label'},
+        )
 
     def test_node_description_resolves_feature_names(self):
         description = self.queries.describe_node('n3')
@@ -255,6 +294,7 @@ class TestLexnetQueries(unittest.TestCase):
         self.assertIn('<title>LexNet Explorer</title>', page)
         self.assertIn('explorer.css', page)
         self.assertIn('explorer.js', page)
+        self.assertIn('Semantic labels', page)
         self.assertIn('inspector-section', script)
         self.assertIn("document.createElement('ul')", script)
         self.assertIn('lf-values', script)
@@ -290,6 +330,8 @@ class TestLexnetQueries(unittest.TestCase):
                 family_payload = json.load(response)
             with urlopen(base_url + '/api/search?kind=lf&family_id=group%3A2') as response:
                 group_payload = json.load(response)
+            with urlopen(base_url + '/api/search?kind=semantic&class_id=c0&descendants=1') as response:
+                semantic_payload = json.load(response)
             with urlopen(base_url + '/api/inspect?type=node&id=n3') as response:
                 node_payload = json.load(response)
             with urlopen(base_url + '/api/inspect?type=entry&id=e1') as response:
@@ -309,6 +351,7 @@ class TestLexnetQueries(unittest.TestCase):
         self.assertEqual([row['lf_name'] for row in family_payload['rows']], ['Magn', 'Magn'])
         self.assertIsInstance(family_payload['rows'][0]['lf_name_segments'], list)
         self.assertEqual([row['lf_name'] for row in group_payload['rows']], ['Oper1'])
+        self.assertEqual(semantic_payload['rows'][0]['semantic_label_id'], 'sl1')
         incoming = next(link for link in node_payload['links'] if link.get('direction') == 'Incoming')
         self.assertEqual(incoming['items'][0]['item_id'], 'n1')
         self.assertEqual(entry_payload['title'], 'Lexical entry')

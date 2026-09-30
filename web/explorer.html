@@ -14,6 +14,7 @@
       <button class="tab active" data-kind="word">Words</button>
       <button class="tab" data-kind="lf">Lexical functions</button>
       <button class="tab" data-kind="feature">Features</button>
+      <button class="tab" data-kind="semantic">Semantic labels</button>
     </nav>
     <form class="panel active" id="word-panel" data-kind="word">
       <div class="controls"><input type="text" name="q" placeholder="Search a word…" autofocus><select name="mode"><option>contains</option><option>starts with</option><option>exact</option></select><button class="search">Search</button></div>
@@ -33,6 +34,19 @@
     <form class="panel" id="feature-panel" data-kind="feature">
       <div class="controls"><input type="text" name="q" list="feature-names" placeholder="locution forte, …"><datalist id="feature-names"></datalist><button class="search">Search</button></div>
       <div class="options"><label><input type="radio" name="combine" value="any" checked> Match any</label><label><input type="radio" name="combine" value="all"> Match all</label></div>
+    </form>
+    <form class="panel" id="semantic-panel" data-kind="semantic">
+      <div class="controls">
+        <div class="tree-select" id="semantic-class">
+          <button type="button" class="tree-select-toggle" aria-haspopup="listbox" aria-expanded="false">Choose a semantic class…</button>
+          <div class="tree-select-menu semantic-class-menu" role="listbox" hidden></div>
+          <input type="hidden" name="class_id" value="">
+        </div>
+        <select name="semantic_label_id" id="semantic-label" disabled><option value="">Choose a class first</option></select>
+        <button class="search">Search</button>
+      </div>
+      <div class="controls" style="margin-top: 8px"><input type="text" name="q" list="semantic-label-names" placeholder="Or search a class or label…"><datalist id="semantic-label-names"></datalist></div>
+      <label class="options"><span><input type="checkbox" name="descendants" checked> Include descendants</span></label>
     </form>
     <div class="status" id="status">Ready.</div>
     <div class="table-wrap"><table><thead><tr id="head"></tr></thead><tbody id="results"></tbody></table></div>

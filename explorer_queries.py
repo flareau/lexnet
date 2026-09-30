@@ -18,6 +18,10 @@ EMPTY_FEATURE_RESULTS = [
     'entry_id', 'entry_name', 'entry_label', 'node_id', 'std_name', 'unit_label',
     'matching_features'
 ]
+EMPTY_LABEL_RESULTS = [
+    'semantic_label_id', 'semantic_label_name', 'class_names', 'entry_id',
+    'entry_name', 'entry_label', 'node_id', 'std_name', 'unit_label', 'confidence',
+]
 DEFAULT_ACTANT_LABELS = {'1': 'X', '2': 'Y', '3': 'Z', '4': 'W', '5': 'V', '6': 'U'}
 
 
@@ -269,7 +273,26 @@ class LexnetQueries:
         }
         self.feature_names = data['feature_names']['name'].fillna('').astype(str).to_dict()
         self.form_names = self._name_map(data.get('form_names'))
-        self.label_names = self._name_map(data.get('label_names'))
+        self.label_table = data.get('label_names', pd.DataFrame())
+        self.label_names = self._name_map(self.label_table)
+        self.label_classes = data.get('label_classes', pd.DataFrame())
+        self.label_class_edges = data.get('label_class_edges', pd.DataFrame())
+        self.label_memberships = data.get('label_memberships', pd.DataFrame())
+        self.class_children = {}
+        self.class_parents = {}
+        if not self.label_class_edges.empty:
+            for _, edge in self.label_class_edges.iterrows():
+                parent_id, child_id = edge['parent_class_id'], edge['child_class_id']
+                self.class_children.setdefault(parent_id, []).append(child_id)
+                self.class_parents.setdefault(child_id, []).append(parent_id)
+        self.class_labels = {}
+        self.label_class_ids = {}
+        if not self.label_memberships.empty:
+            for _, membership in self.label_memberships.iterrows():
+                class_id = membership['semantic_class_id']
+                label_id = membership['semantic_label_id']
+                self.class_labels.setdefault(class_id, []).append(label_id)
+                self.label_class_ids.setdefault(label_id, []).append(class_id)
 
     @staticmethod
     def _name_map(frame):
@@ -460,6 +483,112 @@ class LexnetQueries:
             ['entry_name', 'std_name'], key=lambda col: col.astype(str).str.casefold()
         ).reset_index(drop=True)
 
+    def semantic_class_hierarchy(self):
+        """Return one row per class path, preserving multiple inheritance."""
+        if self.label_classes.empty:
+            return []
+        child_ids = set(self.class_parents)
+        roots = [class_id for class_id in self.label_classes.index if class_id not in child_ids]
+        rows = []
+
+        def visit(class_id, depth, ancestors):
+            if class_id in ancestors or class_id not in self.label_classes.index:
+                return
+            row = self.label_classes.loc[class_id]
+            direct_labels = sorted(
+                ({'id': _text(label_id), 'name': self.label_names.get(label_id, _text(label_id))}
+                 for label_id in self.class_labels.get(class_id, [])),
+                key=lambda item: item['name'].casefold(),
+            )
+            rows.append({
+                'id': _text(class_id),
+                'name': _text(row.get('name')),
+                'depth': depth,
+                'semantic_field': _text(row.get('semantic_field')) == '1',
+                'inheritance_type': _text(row.get('inheritance_type')),
+                'labels': direct_labels,
+            })
+            next_ancestors = ancestors | {class_id}
+            children = sorted(
+                set(self.class_children.get(class_id, [])),
+                key=lambda item: _text(self.label_classes.loc[item].get('name')).casefold(),
+            )
+            for child_id in children:
+                visit(child_id, depth + 1, next_ancestors)
+
+        for root_id in roots:
+            visit(root_id, 0, set())
+        return rows
+
+    def semantic_label_ids_for_class(self, class_id, include_descendants=True):
+        """Return labels directly or recursively contained by a semantic class."""
+        class_ids = {class_id}
+        if include_descendants:
+            pending = [class_id]
+            while pending:
+                current = pending.pop()
+                for child_id in self.class_children.get(current, []):
+                    if child_id not in class_ids:
+                        class_ids.add(child_id)
+                        pending.append(child_id)
+        return {
+            label_id for item in class_ids
+            for label_id in self.class_labels.get(item, [])
+        }
+
+    def search_semantic_labels(
+        self, query='', class_id='', semantic_label_id='', include_descendants=True,
+    ):
+        """Find lexical units through labels or semantic classes."""
+        label_ids = set()
+        query = query.strip()
+        if semantic_label_id:
+            label_ids.add(semantic_label_id)
+        elif class_id:
+            label_ids = self.semantic_label_ids_for_class(class_id, include_descendants)
+        elif query:
+            label_ids.update(self._resolve_names([query], self.label_names))
+            class_names = self._name_map(self.label_classes)
+            for matching_class_id in self._resolve_names([query], class_names):
+                label_ids.update(self.semantic_label_ids_for_class(
+                    matching_class_id, include_descendants,
+                ))
+        if not label_ids:
+            return pd.DataFrame(columns=EMPTY_LABEL_RESULTS)
+
+        labels = self.data.get('labels')
+        if labels is None or labels.empty:
+            return pd.DataFrame(columns=EMPTY_LABEL_RESULTS)
+        rows = []
+        matching = labels[labels['semantic_label_id'].isin(label_ids)]
+        for node_id, relation in matching.iterrows():
+            if node_id not in self.nodes.index:
+                continue
+            label_id = relation['semantic_label_id']
+            node = self.nodes.loc[node_id]
+            entry_id = node['entry_id']
+            class_names = sorted({
+                _text(self.label_classes.loc[item].get('name'))
+                for item in self.label_class_ids.get(label_id, [])
+                if item in self.label_classes.index
+            }, key=str.casefold)
+            rows.append({
+                'semantic_label_id': label_id,
+                'semantic_label_name': self.label_names.get(label_id, _text(label_id)),
+                'class_names': ', '.join(class_names),
+                'entry_id': entry_id,
+                'entry_name': self.entry_names.get(entry_id, _text(entry_id)),
+                'entry_label': self.entry_labels.get(entry_id, {}),
+                'node_id': node_id,
+                'std_name': self.node_names.get(node_id, _text(node_id)),
+                'unit_label': self.node_labels.get(node_id, {}),
+                'confidence': _confidence(relation.get('label_%')),
+            })
+        return pd.DataFrame(rows, columns=EMPTY_LABEL_RESULTS).sort_values(
+            ['semantic_label_name', 'entry_name', 'std_name'],
+            key=lambda column: column.astype(str).str.casefold(),
+        ).reset_index(drop=True)
+
     def describe_node(self, node_id):
         """Build a readable, plain-text summary of a lexical unit."""
         if node_id not in self.nodes.index:
@@ -616,7 +745,93 @@ class LexnetQueries:
                     'label': self.entry_labels.get(item_id, {}),
                 }, *self.entry_unit_links(item_id)],
             }
+        if item_type == 'semantic_label':
+            return self.semantic_label_payload(item_id)
+        if item_type == 'semantic_class':
+            return self.semantic_class_payload(item_id)
         return {'title': 'Inspector', 'error': f'Unknown item type: {item_type}'}
+
+    @staticmethod
+    def _plain_link(text, item_type, item_id, prefix=' • '):
+        return {
+            'line': prefix + text,
+            'prefix': prefix,
+            'suffix': '',
+            'plain_item_label': text,
+            'item_type': item_type,
+            'item_id': _text(item_id),
+        }
+
+    def semantic_label_payload(self, semantic_label_id):
+        """Return an inspector payload for one semantic-label instance."""
+        if semantic_label_id not in self.label_names:
+            return {'title': 'Semantic label', 'error': 'Unknown semantic label'}
+        name = self.label_names[semantic_label_id]
+        lines = [name]
+        links = []
+        metadata = self.label_table.loc[semantic_label_id] if semantic_label_id in self.label_table.index else {}
+        information = []
+        for column, label in [
+            ('derivation', 'Derivation'), ('actant_type', 'Actant type'),
+            ('status', 'Status'), ('comment', 'Comment'),
+        ]:
+            value = _text(metadata.get(column))
+            if value:
+                information.append(f' • {label}: {value}')
+        if information:
+            lines.extend(['', 'LABEL INFORMATION', *information])
+
+        class_links = []
+        for class_id in self.label_class_ids.get(semantic_label_id, []):
+            if class_id not in self.label_classes.index:
+                continue
+            class_name = _text(self.label_classes.loc[class_id].get('name'))
+            class_links.append(self._plain_link(class_name, 'semantic_class', class_id))
+        if class_links:
+            lines.extend(['', 'CLASSIFICATION', *(link['line'] for link in class_links)])
+            links.extend(class_links)
+        return {'title': 'Semantic label', 'description': '\n'.join(lines), 'links': links}
+
+    def semantic_class_payload(self, class_id):
+        """Return an inspector payload for one semantic class."""
+        if self.label_classes.empty or class_id not in self.label_classes.index:
+            return {'title': 'Semantic class', 'error': 'Unknown semantic class'}
+        row = self.label_classes.loc[class_id]
+        name = _text(row.get('name'))
+        lines = [name]
+        links = []
+        inheritance = {
+            '0': 'simple', '1': 'multiple inclusive', '2': 'multiple exclusive',
+        }.get(_text(row.get('inheritance_type')), _text(row.get('inheritance_type')))
+        information = [f' • Inheritance: {inheritance}']
+        if _text(row.get('semantic_field')) == '1':
+            information.append(' • Semantic field')
+        comment = _text(row.get('comment'))
+        if comment:
+            information.append(' • Comment: ' + re.sub(r'\s+', ' ', comment).strip())
+        lines.extend(['', 'CLASS INFORMATION', *information])
+
+        sections = [
+            ('PARENTS', self.class_parents.get(class_id, []), 'semantic_class'),
+            ('SUBCLASSES', self.class_children.get(class_id, []), 'semantic_class'),
+            ('DIRECT LABELS', self.class_labels.get(class_id, []), 'semantic_label'),
+        ]
+        for title, item_ids, item_type in sections:
+            section_links = []
+            for item_id in sorted(set(item_ids), key=lambda item: (
+                self.label_names.get(item, '') if item_type == 'semantic_label'
+                else _text(self.label_classes.loc[item].get('name'))
+            ).casefold()):
+                item_name = (
+                    self.label_names.get(item_id, _text(item_id))
+                    if item_type == 'semantic_label'
+                    else _text(self.label_classes.loc[item_id].get('name'))
+                )
+                section_links.append(self._plain_link(item_name, item_type, item_id))
+            if section_links:
+                lines.extend(['', title, *(link['line'] for link in section_links)])
+                links.extend(section_links)
+        return {'title': 'Semantic class', 'description': '\n'.join(lines), 'links': links}
 
     @staticmethod
     def _confidence_link(text, value):
@@ -637,7 +852,13 @@ class LexnetQueries:
             semantic_label_id = row.get('semantic_label_id')
             name = self.label_names.get(semantic_label_id, 'Unknown semantic label')
             if name:
-                links.append(self._confidence_link(name, row.get('label_%')))
+                link = self._confidence_link(name, row.get('label_%'))
+                link.update({
+                    'plain_item_label': name,
+                    'item_type': 'semantic_label',
+                    'item_id': _text(semantic_label_id),
+                })
+                links.append(link)
         return links
 
     def propositional_form_links(self, node_id):

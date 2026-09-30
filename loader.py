@@ -215,19 +215,80 @@ def load_form_names(file, path, encoding=DEFAULT_ENCODING):
     return form_names
 
 
-def load_label_names(file, path, encoding=DEFAULT_ENCODING):
+def load_label_model(file, path, encoding=DEFAULT_ENCODING):
+    """Load semantic-label instances and their polyhierarchical class model."""
     xml = load_xml(file=file, path=path, encoding=encoding)
-    label_names = pd.DataFrame([
-        {'semantic_label_id': tag.get('id'), 'name': tag.get('name')}
-        for tag in xml.iter('instance')
-    ])
+    labels = []
+    classes = []
+    edges = []
+    memberships = []
+
+    def visit(tag, parent_id=None):
+        class_id = tag.get('id')
+        classes.append({
+            'semantic_class_id': class_id,
+            'name': tag.get('name'),
+            'status': tag.get('status'),
+            'semantic_field': tag.get('semfield'),
+            'inheritance_type': tag.get('inheritancetype'),
+            'comment': tag.get('comment'),
+        })
+        if parent_id is not None:
+            edges.append({'parent_class_id': parent_id, 'child_class_id': class_id})
+        for instance in tag.findall('instance'):
+            semantic_label_id = instance.get('id')
+            labels.append({
+                'semantic_label_id': semantic_label_id,
+                'name': instance.get('name'),
+                'status': instance.get('status'),
+                'derivation': instance.get('derivation'),
+                'actant_type': instance.get('acttype'),
+                'comment': instance.get('comment'),
+            })
+            memberships.append({
+                'semantic_class_id': class_id,
+                'semantic_label_id': semantic_label_id,
+            })
+        for child in tag.findall('class'):
+            visit(child, class_id)
+
+    for root_class in xml.findall('class'):
+        visit(root_class)
+
+    # Keep supporting small instance-only XML files used by callers and tests.
+    if not labels:
+        labels = [{
+            'semantic_label_id': tag.get('id'),
+            'name': tag.get('name'),
+            'status': tag.get('status'),
+            'derivation': tag.get('derivation'),
+            'actant_type': tag.get('acttype'),
+            'comment': tag.get('comment'),
+        } for tag in xml.iter('instance')]
+
+    label_names = pd.DataFrame(labels)
     name_counts = label_names.groupby('semantic_label_id', dropna=False)['name'].nunique(dropna=False)
     conflicting_ids = name_counts[name_counts > 1].index.tolist()
     if conflicting_ids:
         raise ValueError(f'Conflicting names for semantic label IDs: {conflicting_ids}')
     label_names.drop_duplicates('semantic_label_id', inplace=True)
+    label_classes = pd.DataFrame(classes, columns=[
+        'semantic_class_id', 'name', 'status', 'semantic_field',
+        'inheritance_type', 'comment',
+    ]).drop_duplicates('semantic_class_id')
+    label_class_edges = pd.DataFrame(edges, columns=[
+        'parent_class_id', 'child_class_id',
+    ]).drop_duplicates()
+    label_memberships = pd.DataFrame(memberships, columns=[
+        'semantic_class_id', 'semantic_label_id',
+    ]).drop_duplicates()
     print_imported(label_names, file, items='semantic labels')
-    return label_names
+    return label_names, label_classes, label_class_edges, label_memberships
+
+
+def load_label_names(file, path, encoding=DEFAULT_ENCODING):
+    """Load the flat semantic-label list for backward compatibility."""
+    return load_label_model(file, path, encoding)[0]
 
 
 def load_lf_names(file, path, encoding=DEFAULT_ENCODING):
@@ -316,8 +377,12 @@ def load(path, sources=None, columns=None, separator=DEFAULT_SEPARATOR, encoding
     ln['feature_names'].set_index('feature_id', inplace=True)
     ln['form_names'] = load_form_names(file=sources['form_names'], path=path, encoding=encoding)
     ln['form_names'].set_index('wordform_feature_id', inplace=True)
-    ln['label_names'] = load_label_names(file=sources['label_names'], path=path, encoding=encoding)
+    (
+        ln['label_names'], ln['label_classes'],
+        ln['label_class_edges'], ln['label_memberships'],
+    ) = load_label_model(file=sources['label_names'], path=path, encoding=encoding)
     ln['label_names'].set_index('semantic_label_id', inplace=True)
+    ln['label_classes'].set_index('semantic_class_id', inplace=True)
     ln['lf_names'] = load_lf_names(file=sources['lf_names'], path=path, encoding=encoding)
     ln['lf_names'].set_index('lexical_function_id', inplace=True)
 

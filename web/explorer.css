@@ -25,6 +25,9 @@ button.search { background: #0878ba; border-color: #0878ba; color: white; cursor
 .tree-select-item:hover, .tree-select-item:focus { background: #edf6fc; outline: none; }
 .tree-select-group { color: #6d7882; font-weight: 600; background: #f3f5f7; }
 .tree-select-family { padding-left: 28px; }
+.semantic-class-menu { min-width: 440px; }
+.semantic-class-item { font-size: 13px; }
+.semantic-field-item { font-weight: 650; }
 .options { margin-top: 9px; display: flex; gap: 18px; font-size: 14px; }
 .status { padding: 8px 14px; color: #536475; background: #f7f9fa; border-bottom: 1px solid #d8dee5; font-size: 13px; }
 .table-wrap { overflow: auto; flex: 1; }

@@ -1,7 +1,8 @@
 const columns = {
   word: [['entry_name','Entry'], ['std_name','Lexical unit'], ['pos','POS']],
   lf: [['lf_name','Function'], ['source_name','Source'], ['target_name','Target'], ['form','Form']],
-  feature: [['entry_name','Entry'], ['std_name','Lexical unit'], ['matching_features','Matching features']]
+  feature: [['entry_name','Entry'], ['std_name','Lexical unit'], ['matching_features','Matching features']],
+  semantic: [['semantic_label_name','Label'], ['entry_name','Entry'], ['std_name','Lexical unit']]
 };
 let kind = 'word';
 let currentRows = [];
@@ -149,7 +150,7 @@ function renderRows() {
     const tr = document.createElement('tr');
     for (const [key] of columns[kind]) {
       const td=document.createElement('td'); td.title=row[key] || '';
-      if ((kind === 'word' || kind === 'feature') && (key === 'entry_name' || key === 'std_name')) {
+      if ((kind === 'word' || kind === 'feature' || kind === 'semantic') && (key === 'entry_name' || key === 'std_name')) {
         const link=document.createElement('button');
         link.type='button'; link.className='node-link';
         appendLexicalName(link, key === 'entry_name' ? row.entry_label : row.unit_label);
@@ -171,6 +172,14 @@ function renderRows() {
         td.append(link);
       } else if (kind === 'lf' && key === 'lf_name') {
         appendLfName(td, row[key] || '', row.lf_name_segments);
+      } else if (kind === 'semantic' && key === 'semantic_label_name') {
+        const link=document.createElement('button');
+        link.type='button'; link.className='node-link'; link.textContent=row.semantic_label_name;
+        if (Number(row.confidence) < 100) {
+          link.classList.add('low-confidence'); link.title=`Confidence: ${row.confidence}%`;
+        }
+        link.addEventListener('click', () => showItem('semantic_label', row.semantic_label_id));
+        td.append(link);
       } else td.textContent=row[key] || '';
       tr.append(td);
     }
@@ -184,6 +193,7 @@ async function search(event) {
   const params = new URLSearchParams(new FormData(form));
   params.set('kind', form.dataset.kind);
   if (form.dataset.kind === 'word') params.set('forms', form.elements.forms.checked ? '1' : '0');
+  if (form.dataset.kind === 'semantic') params.set('descendants', form.elements.descendants.checked ? '1' : '0');
   status.textContent = 'Searching…'; results.replaceChildren();
   try {
     const response = await fetch('/api/search?' + params);
@@ -214,7 +224,8 @@ function renderDetails(payload) {
   const sectionTitles = new Set([
     'ENTRY INFORMATION', 'LEXICAL UNITS', 'GRAMMATICAL INFORMATION',
     'DEFINITION', 'WORDFORMS', 'SEMANTIC LABELS', 'PROPOSITIONAL FORMS',
-    'LEXICAL RELATIONS', 'EXAMPLES'
+    'LEXICAL RELATIONS', 'EXAMPLES', 'LABEL INFORMATION', 'CLASSIFICATION',
+    'CLASS INFORMATION', 'PARENTS', 'SUBCLASSES', 'DIRECT LABELS'
   ]);
   function appendLine(parent, line, removeBullet=false) {
     const choices = links.get(line);
@@ -243,6 +254,16 @@ function renderDetails(payload) {
           } else example.append(document.createTextNode(segment.text));
         }
         parent.append(example);
+      } else if (relation.plain_item_label !== undefined) {
+        const link = document.createElement('button');
+        link.type = 'button'; link.className = 'node-link';
+        link.textContent = relation.plain_item_label;
+        if (relation.low_confidence) {
+          link.classList.add('low-confidence');
+          link.title = `Confidence: ${relation.confidence}%`;
+        }
+        link.addEventListener('click', () => showItem(relation.item_type, relation.item_id));
+        parent.append(link);
       } else if (relation.information_text !== undefined) {
         const information = document.createElement('span');
         if (relation.information_segments) {
@@ -365,6 +386,12 @@ async function initialize() {
   for (const [target, values] of [['lf-names', meta.lexical_functions], ['feature-names', meta.features]]) {
     const list=document.querySelector('#'+target); for (const value of values) { const option=document.createElement('option'); option.value=value; list.append(option); }
   }
+  const semanticNames = new Set(meta.semantic_labels || []);
+  for (const item of meta.semantic_hierarchy || []) semanticNames.add(item.name);
+  const semanticNameList = document.querySelector('#semantic-label-names');
+  for (const value of [...semanticNames].sort(collator.compare)) {
+    const option=document.createElement('option'); option.value=value; semanticNameList.append(option);
+  }
   const familyControl = document.querySelector('#lf-family');
   const familyToggle = familyControl.querySelector('.tree-select-toggle');
   const familyMenu = familyControl.querySelector('.tree-select-menu');
@@ -405,6 +432,51 @@ async function initialize() {
   nameInput.addEventListener('input', () => {
     if (!nameInput.value) return;
     chooseFamily('', 'Choose a family…', false);
+  });
+
+  const semanticControl = document.querySelector('#semantic-class');
+  const semanticToggle = semanticControl.querySelector('.tree-select-toggle');
+  const semanticMenu = semanticControl.querySelector('.tree-select-menu');
+  const semanticValue = semanticControl.querySelector('input[name=class_id]');
+  const semanticLabel = document.querySelector('#semantic-label');
+  const semanticInput = document.querySelector('#semantic-panel input[name=q]');
+  function chooseSemanticClass(item, clearName=true) {
+    semanticValue.value = item?.id || '';
+    semanticToggle.textContent = item?.name || 'Choose a semantic class…';
+    semanticMenu.hidden = true; semanticToggle.setAttribute('aria-expanded', 'false');
+    if (clearName) semanticInput.value = '';
+    semanticLabel.replaceChildren();
+    const all=document.createElement('option'); all.value='';
+    all.textContent = item ? 'All labels in class' : 'Choose a class first';
+    semanticLabel.append(all);
+    for (const label of item?.labels || []) {
+      const option=document.createElement('option'); option.value=label.id; option.textContent=label.name;
+      semanticLabel.append(option);
+    }
+    semanticLabel.disabled = !item;
+  }
+  for (const item of meta.semantic_hierarchy || []) {
+    const button=document.createElement('button');
+    button.type='button'; button.className='tree-select-item semantic-class-item';
+    if (item.semantic_field) button.classList.add('semantic-field-item');
+    button.style.paddingLeft = `${12 + item.depth * 16}px`;
+    button.textContent=item.name; button.setAttribute('role', 'option');
+    button.addEventListener('click', () => chooseSemanticClass(item));
+    semanticMenu.append(button);
+  }
+  semanticToggle.addEventListener('click', () => {
+    semanticMenu.hidden=!semanticMenu.hidden;
+    semanticToggle.setAttribute('aria-expanded', String(!semanticMenu.hidden));
+  });
+  semanticLabel.addEventListener('change', () => { semanticInput.value=''; });
+  semanticInput.addEventListener('input', () => {
+    if (!semanticInput.value) return;
+    chooseSemanticClass(null, false);
+  });
+  document.addEventListener('click', event => {
+    if (!semanticControl.contains(event.target)) {
+      semanticMenu.hidden=true; semanticToggle.setAttribute('aria-expanded', 'false');
+    }
   });
 }
 document.querySelectorAll('.tab').forEach(x => x.addEventListener('click', () => selectTab(x.dataset.kind)));

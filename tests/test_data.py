@@ -17,6 +17,7 @@ class TestRealDataIntegration(unittest.TestCase):
             'nodes', 'entries', 'copolysemy', 'features', 'forms',
             'labels', 'propforms', 'lfs', 'definitions',
             'feature_names', 'form_names', 'label_names', 'lf_names',
+            'label_classes', 'label_class_edges', 'label_memberships',
             'examples', 'ex-rel'
         }
         self.assertTrue(required.issubset(set(self.ln.keys())))
@@ -31,6 +32,7 @@ class TestRealDataIntegration(unittest.TestCase):
         self.assertEqual(self.ln['feature_names'].index.name, 'feature_id')
         self.assertEqual(self.ln['form_names'].index.name, 'wordform_feature_id')
         self.assertEqual(self.ln['label_names'].index.name, 'semantic_label_id')
+        self.assertEqual(self.ln['label_classes'].index.name, 'semantic_class_id')
         self.assertEqual(self.ln['lf_names'].index.name, 'lexical_function_id')
 
     def test_key_columns_present(self):
@@ -49,7 +51,7 @@ class TestRealDataIntegration(unittest.TestCase):
         tables = {
             'nodes', 'entries', 'features', 'labels', 'propforms',
             'definitions', 'examples', 'feature_names', 'form_names',
-            'label_names', 'lf_names',
+            'label_names', 'label_classes', 'lf_names',
         }
         for table in tables:
             with self.subTest(table=table):
@@ -62,6 +64,10 @@ class TestRealDataIntegration(unittest.TestCase):
             ('forms.node_id', self.ln['forms'].index, self.ln['nodes'].index),
             ('labels.node_id', self.ln['labels'].index, self.ln['nodes'].index),
             ('labels.semantic_label_id', self.ln['labels']['semantic_label_id'], self.ln['label_names'].index),
+            ('label_memberships.semantic_class_id', self.ln['label_memberships']['semantic_class_id'], self.ln['label_classes'].index),
+            ('label_memberships.semantic_label_id', self.ln['label_memberships']['semantic_label_id'], self.ln['label_names'].index),
+            ('label_class_edges.parent_class_id', self.ln['label_class_edges']['parent_class_id'], self.ln['label_classes'].index),
+            ('label_class_edges.child_class_id', self.ln['label_class_edges']['child_class_id'], self.ln['label_classes'].index),
             ('propforms.node_id', self.ln['propforms'].index, self.ln['nodes'].index),
             ('definitions.node_id', self.ln['definitions'].index, self.ln['nodes'].index),
             ('copolysemy.source_node_id', self.ln['copolysemy']['source_node_id'], self.ln['nodes'].index),

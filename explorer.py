@@ -60,6 +60,8 @@ def create_server(queries, data_path, host='127.0.0.1', port=0):
                         ),
                         'lf_hierarchy': queries.lexical_function_hierarchy(),
                         'features': sorted(set(queries.feature_names.values()), key=str.casefold),
+                        'semantic_hierarchy': queries.semantic_class_hierarchy(),
+                        'semantic_labels': sorted(set(queries.label_names.values()), key=str.casefold),
                     })
                 if request.path == '/api/inspect':
                     return self._json(queries.inspector_payload(
@@ -106,6 +108,15 @@ def create_server(queries, data_path, host='127.0.0.1', port=0):
                 )
                 count = result.entry_id.nunique()
                 summary = f'{len(result):,} lexical units in {count:,} entries.'
+            elif kind == 'semantic':
+                result = queries.search_semantic_labels(
+                    query=query,
+                    class_id=self._param(params, 'class_id'),
+                    semantic_label_id=self._param(params, 'semantic_label_id'),
+                    include_descendants=self._param(params, 'descendants') == '1',
+                )
+                count = result.node_id.nunique()
+                summary = f'{len(result):,} label assignments on {count:,} lexical units.'
             else:
                 return self._json({'error': 'Unknown search type'}, status=400)
             if len(result) > 2000:
