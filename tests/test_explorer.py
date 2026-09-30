@@ -43,6 +43,7 @@ class TestLexnetQueries(unittest.TestCase):
             ]).set_index('lexical_function_id'),
             'lfs': pd.DataFrame([
                 {'source_node_id': 'n1', 'lexical_function_id': 'lf1', 'target_node_id': 'n2', 'form': '', 'frame': '', 'constraint': ''},
+                {'source_node_id': 'n1', 'lexical_function_id': 'lf1', 'target_node_id': 'n3', 'form': '', 'frame': '', 'constraint': ''},
                 {'source_node_id': 'n3', 'lexical_function_id': 'lf2', 'target_node_id': 'n1', 'form': 'prendre', 'frame': '', 'constraint': ''},
             ]),
             'definitions': pd.DataFrame(columns=['node_id', 'def_HTML']).set_index('node_id'),
@@ -100,12 +101,15 @@ class TestLexnetQueries(unittest.TestCase):
         self.assertNotIn('Node: n1', description)
         self.assertNotIn('(e1)', description)
 
-    def test_lexical_function_links_target_related_units(self):
-        outgoing = self.queries.lexical_function_links('n3')
-        incoming = self.queries.lexical_function_links('n1')
-        self.assertEqual(outgoing[0]['item_id'], 'n1')
-        self.assertEqual(outgoing[0]['item_name'], 'chat I')
-        self.assertEqual({link['item_id'] for link in incoming}, {'n2', 'n3'})
+    def test_lexical_function_links_group_alternative_values(self):
+        links = self.queries.lexical_function_links('n1')
+        magn = links[0]
+        self.assertEqual(magn['line'], 'Magn: chat II, prendre le large')
+        self.assertEqual(magn['direction'], 'Outgoing')
+        self.assertEqual([item['item_id'] for item in magn['items']], ['n2', 'n3'])
+        self.assertEqual(magn['line'].count('Magn'), 1)
+        self.assertEqual(links[1]['direction'], 'Incoming')
+        self.assertEqual(links[1]['items'][0]['item_id'], 'n3')
 
     def test_entry_inspector_lists_units_with_grammar(self):
         payload = self.queries.inspector_payload('entry', 'e1')
@@ -130,6 +134,7 @@ class TestLexnetQueries(unittest.TestCase):
         self.assertIn('explorer.js', page)
         self.assertIn('inspector-section', script)
         self.assertIn("document.createElement('ul')", script)
+        self.assertIn('lf-values', script)
 
     def test_local_server_serves_page_and_search_api(self):
         server = create_server(self.queries, '/tmp/example')
@@ -166,9 +171,9 @@ class TestLexnetQueries(unittest.TestCase):
         self.assertIn('function sortBy(key)', script)
         self.assertEqual(script_type, 'text/javascript')
         self.assertEqual({row['node_id'] for row in payload['rows']}, {'n1', 'n2'})
-        self.assertEqual([row['lf_name'] for row in family_payload['rows']], ['Magn'])
+        self.assertEqual([row['lf_name'] for row in family_payload['rows']], ['Magn', 'Magn'])
         self.assertEqual([row['lf_name'] for row in group_payload['rows']], ['Oper1'])
-        self.assertEqual(node_payload['links'][-1]['item_id'], 'n1')
+        self.assertEqual(node_payload['links'][-1]['items'][0]['item_id'], 'n1')
         self.assertEqual(entry_payload['title'], 'Lexical entry')
 
 

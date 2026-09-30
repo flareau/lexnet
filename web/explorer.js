@@ -103,7 +103,7 @@ function renderDetails(payload) {
   const sectionTitles = new Set([
     'ENTRY INFORMATION', 'LEXICAL UNITS', 'GRAMMATICAL INFORMATION',
     'DEFINITION', 'WORDFORMS', 'SEMANTIC LABELS', 'PROPOSITIONAL FORMS',
-    'LEXICAL FUNCTIONS', 'EXAMPLES'
+    'LEXICAL RELATIONS', 'EXAMPLES'
   ]);
   function appendLine(parent, line, removeBullet=false) {
     const choices = links.get(line);
@@ -112,12 +112,37 @@ function renderDetails(payload) {
       const prefix = removeBullet && relation.prefix.startsWith(' • ')
         ? relation.prefix.slice(3) : relation.prefix;
       parent.append(document.createTextNode(prefix));
-      const link = document.createElement('button');
-      link.type='button'; link.className='node-link'; link.textContent=relation.item_name;
-      link.addEventListener('click', () => showItem(relation.item_type, relation.item_id));
-      parent.append(link);
+      if (relation.items) {
+        const list = document.createElement('ul'); list.className = 'lf-values';
+        for (const item of relation.items) {
+          const listItem = document.createElement('li');
+          const link = document.createElement('button');
+          link.type='button'; link.className='node-link'; link.textContent=item.item_name;
+          link.addEventListener('click', () => showItem(item.item_type, item.item_id));
+          listItem.append(link); list.append(listItem);
+        }
+        parent.append(list);
+      } else {
+        const link = document.createElement('button');
+        link.type='button'; link.className='node-link'; link.textContent=relation.item_name;
+        link.addEventListener('click', () => showItem(relation.item_type, relation.item_id));
+        parent.append(link);
+      }
       parent.append(document.createTextNode(relation.suffix || ''));
     } else parent.append(document.createTextNode(removeBullet ? line.slice(3) : line));
+  }
+  function appendRelationGroups(parent, relationLines) {
+    let list = null;
+    for (const line of relationLines) {
+      if (line === 'Outgoing' || line === 'Incoming') {
+        const group = document.createElement('section'); group.className = 'relation-group';
+        const heading = document.createElement('h3'); heading.textContent = line;
+        list = document.createElement('ul'); list.className = 'inspector-list';
+        group.append(heading, list); parent.append(group);
+      } else if (list) {
+        const item = document.createElement('li'); appendLine(item, line); list.append(item);
+      }
+    }
   }
   let index = 0;
   while (index < lines.length) {
@@ -131,13 +156,14 @@ function renderDetails(payload) {
       section.className = 'inspector-section';
       section.open = title !== 'WORDFORMS';
       const summary = document.createElement('summary');
-      const itemCount = sectionLines.filter(Boolean).length;
+      const itemCount = sectionLines.filter(line => line && line !== 'Outgoing' && line !== 'Incoming').length;
       summary.textContent = `${title} (${itemCount})`;
       const body = document.createElement('div');
       body.className = 'inspector-section-content';
       const manualBullets = sectionLines.length > 0 && sectionLines.every(line => line.startsWith(' • '));
-      const listed = manualBullets || title === 'LEXICAL FUNCTIONS';
-      if (listed) {
+      if (title === 'LEXICAL RELATIONS') {
+        appendRelationGroups(body, sectionLines);
+      } else if (manualBullets) {
         const list = document.createElement('ul'); list.className = 'inspector-list';
         for (const line of sectionLines) {
           const item = document.createElement('li'); appendLine(item, line, manualBullets); list.append(item);

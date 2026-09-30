@@ -43,4 +43,10 @@ tbody tr:hover { background: #edf6fc; }
 .inspector-section-content { padding-top: 4px; white-space: pre-wrap; }
 .inspector-list { margin: 4px 0 0; padding-left: 24px; white-space: normal; }
 .inspector-list li { margin: 2px 0; }
+.lf-values { display: inline; margin: 0; padding: 0; list-style: none; }
+.lf-values li { display: inline; }
+.lf-values li:not(:last-child)::after { content: ', '; }
+.relation-group h3 { margin: 6px 0 2px; font-size: 14px; }
+.relation-group .inspector-list { margin-top: 2px; }
+.relation-group + .relation-group { margin-top: 8px; }
 @media (max-width: 850px) { main { height: auto; grid-template-columns: 1fr; } .card { min-height: 500px; } .details { min-height: 500px; } }

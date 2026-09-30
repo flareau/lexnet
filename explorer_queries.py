@@ -279,8 +279,12 @@ class LexnetQueries:
 
         relation_links = self.lexical_function_links(node_id)
         if relation_links:
-            lines.extend(['', 'LEXICAL FUNCTIONS'])
-            lines.extend(link['line'] for link in relation_links)
+            lines.extend(['', 'LEXICAL RELATIONS'])
+            for direction in ('Outgoing', 'Incoming'):
+                grouped_links = [link for link in relation_links if link['direction'] == direction]
+                if grouped_links:
+                    lines.append(direction)
+                    lines.extend(link['line'] for link in grouped_links)
 
         ex_rel = self.data.get('ex-rel')
         examples = self.data.get('examples')
@@ -382,24 +386,37 @@ class LexnetQueries:
         if relations is None or relations.empty:
             return []
         links = []
-        outgoing = relations[relations['source_node_id'] == node_id]
-        incoming = relations[relations['target_node_id'] == node_id]
-        for _, row in outgoing.iterrows():
-            name = self.node_names.get(row['target_node_id'], _text(row['target_node_id']))
-            function_id = row['lexical_function_id']
-            prefix = f" → {self.lf_names.get(function_id, function_id)}: "
-            links.append({
-                'line': prefix + name, 'prefix': prefix, 'suffix': '',
-                'item_type': 'node', 'item_id': _text(row['target_node_id']), 'item_name': name,
-            })
-        for _, row in incoming.iterrows():
-            name = self.node_names.get(row['source_node_id'], _text(row['source_node_id']))
-            function_id = row['lexical_function_id']
-            prefix = f" ← {self.lf_names.get(function_id, function_id)}: "
-            links.append({
-                'line': prefix + name, 'prefix': prefix, 'suffix': '',
-                'item_type': 'node', 'item_id': _text(row['source_node_id']), 'item_name': name,
-            })
+
+        def append_groups(rows, related_id_column, direction):
+            groups = {}
+            for _, row in rows.iterrows():
+                function_id = row['lexical_function_id']
+                related_id = row[related_id_column]
+                name = self.node_names.get(related_id, _text(related_id))
+                groups.setdefault(function_id, []).append({
+                    'item_type': 'node',
+                    'item_id': _text(related_id),
+                    'item_name': name,
+                })
+            for function_id, items in groups.items():
+                function_name = self.lf_names.get(function_id, function_id)
+                prefix = f'{function_name}: '
+                links.append({
+                    'line': prefix + ', '.join(item['item_name'] for item in items),
+                    'prefix': prefix,
+                    'suffix': '',
+                    'items': items,
+                    'direction': direction,
+                })
+
+        append_groups(
+            relations[relations['source_node_id'] == node_id],
+            'target_node_id', 'Outgoing',
+        )
+        append_groups(
+            relations[relations['target_node_id'] == node_id],
+            'source_node_id', 'Incoming',
+        )
         return links
 
     def _append_wordforms(self, lines, node_id):

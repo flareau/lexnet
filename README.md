@@ -99,8 +99,8 @@ lexical-unit names are links to the Inspector.
 The Inspector displays lexical entries and lexical units. Entry views list
 their lexical units with compact grammatical summaries. Lexical-unit views
 include grammatical information, definitions, wordforms, semantic labels,
-propositional forms, lexical functions, and examples when available. Related
-entries and lexical units are navigable links.
+propositional forms, lexical relations grouped by direction, and examples when
+available. Related entries and lexical units are navigable links.
 
 Internal LexNet IDs are used for navigation but omitted from the display.
 Names for grammatical features, wordform features, semantic labels, and
