@@ -6,18 +6,18 @@ from urllib.request import urlopen
 import pandas as pd
 
 from explorer import CSS_PATH, PAGE_PATH, SCRIPT_PATH, create_server
-from explorer_queries import LexnetQueries, split_query
+from explorer_queries import LexnetQueries, _example_segments, split_query
 
 
 class TestLexnetQueries(unittest.TestCase):
     def setUp(self):
         self.data = {
             'entries': pd.DataFrame([
-                {'entry_id': 'e1', 'entry_name': 'chat', 'subscript': 'N, masc', 'superscript': '1'},
+                {'entry_id': 'e1', 'entry_name': 'chat', 'subscript': 'N, masc', 'superscript': '1', 'entry_%': 60},
                 {'entry_id': 'e2', 'entry_name': 'prendre le large', 'subscript': '', 'superscript': ''},
             ]).set_index('entry_id'),
             'nodes': pd.DataFrame([
-                {'node_id': 'n1', 'entry_id': 'e1', 'std_name': 'chat I', 'lexnum': 'I'},
+                {'node_id': 'n1', 'entry_id': 'e1', 'std_name': 'chat I', 'lexnum': 'I', 'node_%': 60},
                 {'node_id': 'n2', 'entry_id': 'e1', 'std_name': 'chat II', 'lexnum': 'II'},
                 {'node_id': 'n3', 'entry_id': 'e2', 'std_name': 'prendre le large', 'lexnum': ''},
             ]).set_index('node_id'),
@@ -48,11 +48,19 @@ class TestLexnetQueries(unittest.TestCase):
             ]),
             'definitions': pd.DataFrame(columns=['node_id', 'def_HTML']).set_index('node_id'),
             'labels': pd.DataFrame([
-                {'node_id': 'n1', 'semantic_label_id': 'sl1'},
+                {'node_id': 'n1', 'semantic_label_id': 'sl1', 'label_%': 90},
             ]).set_index('node_id'),
-            'propforms': pd.DataFrame(columns=['node_id', 'propform']).set_index('node_id'),
-            'examples': pd.DataFrame(columns=['example_id', 'content']).set_index('example_id'),
-            'ex-rel': pd.DataFrame(columns=['node_id', 'example_id']),
+            'propforms': pd.DataFrame([
+                {'node_id': 'n1', 'propform': 'X est un chat', 'propform_confid': 80},
+            ]).set_index('node_id'),
+            'examples': pd.DataFrame([
+                {'example_id': 'x1', 'content': '<p>Le chat dort.</p>'},
+                {'example_id': 'x2', 'content': 'Un chat joue.'},
+            ]).set_index('example_id'),
+            'ex-rel': pd.DataFrame([
+                {'node_id': 'n1', 'example_id': 'x1', 'occurrence': '7,11;', 'position': 2, '%': 75},
+                {'node_id': 'n1', 'example_id': 'x2', 'occurrence': '4,8;', 'position': 1, '%': 100},
+            ]),
         }
         self.queries = LexnetQueries(self.data)
 
@@ -152,6 +160,41 @@ class TestLexnetQueries(unittest.TestCase):
         entry_link = next(link for link in payload['links'] if link.get('item_type') == 'entry')
         self.assertEqual(entry_link['item_type'], 'entry')
         self.assertEqual(entry_link['item_id'], 'e1')
+        self.assertEqual(entry_link['item_label']['confidence'], 60)
+        self.assertEqual(payload['links'][0]['label']['confidence'], 60)
+
+    def test_information_confidence_is_exposed_consistently(self):
+        payload = self.queries.inspector_payload('node', 'n1')
+        label = next(link for link in payload['links'] if link.get('information_text') == 'Label One')
+        propform = next(link for link in payload['links'] if link.get('information_text') == 'X est un chat')
+
+        self.assertTrue(label['low_confidence'])
+        self.assertEqual(label['confidence'], 90)
+        self.assertTrue(propform['low_confidence'])
+        self.assertEqual(propform['confidence'], 80)
+
+    def test_examples_follow_position_and_mark_occurrences(self):
+        links = self.queries.example_links('n1')
+
+        self.assertEqual([link['line'] for link in links], [
+            ' • Un chat joue.', ' • Le chat dort.',
+        ])
+        self.assertEqual(
+            [segment['text'] for segment in links[0]['example_segments'] if segment['highlighted']],
+            ['chat'],
+        )
+        self.assertFalse(links[0]['low_confidence'])
+        self.assertTrue(links[1]['low_confidence'])
+        self.assertEqual(links[1]['confidence'], 75)
+
+    def test_example_segments_support_multiple_spans_and_html_entities(self):
+        segments = _example_segments('<p>chat&nbsp;et chat</p>', '4,8;17,21;')
+
+        self.assertEqual(''.join(segment['text'] for segment in segments), 'chat et chat')
+        self.assertEqual(
+            [segment['text'] for segment in segments if segment['highlighted']],
+            ['chat', 'chat'],
+        )
 
     def test_browser_asset_is_available(self):
         self.assertTrue(PAGE_PATH.is_file())
@@ -173,6 +216,7 @@ class TestLexnetQueries(unittest.TestCase):
         self.assertIn('function appendLexicalName', script)
         self.assertIn('lexical-name-sense', script)
         self.assertIn('lexical-name-scripts', script)
+        self.assertIn('example-occurrence', script)
         self.assertIn("atomicLfNames = ['De_nouveau']", script)
         self.assertIn("document.createElement(scriptMarker === '_' ? 'sub' : 'sup')", script)
 
@@ -214,7 +258,8 @@ class TestLexnetQueries(unittest.TestCase):
         self.assertEqual(payload['rows'][0]['entry_label']['subscript'], 'N, masc')
         self.assertEqual([row['lf_name'] for row in family_payload['rows']], ['Magn', 'Magn'])
         self.assertEqual([row['lf_name'] for row in group_payload['rows']], ['Oper1'])
-        self.assertEqual(node_payload['links'][-1]['items'][0]['item_id'], 'n1')
+        incoming = next(link for link in node_payload['links'] if link.get('direction') == 'Incoming')
+        self.assertEqual(incoming['items'][0]['item_id'], 'n1')
         self.assertEqual(entry_payload['title'], 'Lexical entry')
 
 

@@ -86,6 +86,80 @@ def _rows_for_index(frame, key):
     return rows
 
 
+def _occurrence_ranges(value):
+    """Return zero-based, half-open ranges from LexNet's 1-based spans."""
+    ranges = []
+    for start, end in re.findall(r'(\d+)\s*,\s*(\d+)', _text(value)):
+        start, end = int(start) - 1, int(end) - 1
+        if end > start:
+            ranges.append((start, end))
+    return ranges
+
+
+def _example_segments(content, occurrence):
+    """Convert example HTML to plain-text segments carrying occurrence marks."""
+    raw = _text(content)
+    ranges = _occurrence_ranges(occurrence)
+
+    def is_marked(start, end):
+        return any(start < range_end and end > range_start for range_start, range_end in ranges)
+
+    characters = []
+    index = 0
+    while index < len(raw):
+        if raw[index] == '<':
+            end = raw.find('>', index + 1)
+            if end != -1:
+                characters.append((' ', False))
+                index = end + 1
+                continue
+        if raw[index] == '&':
+            match = re.match(r'&(?:#[xX][0-9a-fA-F]+|#\d+|[A-Za-z][A-Za-z0-9]+);', raw[index:])
+            if match:
+                end = index + len(match.group(0))
+                decoded = html.unescape(match.group(0))
+                marked = is_marked(index, end)
+                characters.extend((character, marked) for character in decoded)
+                index = end
+                continue
+        characters.append((raw[index], is_marked(index, index + 1)))
+        index += 1
+
+    normalized = []
+    pending_space = False
+    pending_mark = False
+    for character, marked in characters:
+        if character.isspace():
+            if normalized:
+                pending_space = True
+                pending_mark = pending_mark or marked
+            continue
+        if pending_space:
+            normalized.append((' ', pending_mark))
+            pending_space = False
+            pending_mark = False
+        normalized.append((character, marked))
+
+    segments = []
+    for character, marked in normalized:
+        if segments and segments[-1]['highlighted'] == marked:
+            segments[-1]['text'] += character
+        else:
+            segments.append({'text': character, 'highlighted': marked})
+    return segments
+
+
+def _confidence(value):
+    """Return normalized confidence, defaulting to 100 percent."""
+    try:
+        number = float(value)
+    except (TypeError, ValueError):
+        return 100
+    if pd.isna(number):
+        return 100
+    return int(number) if number.is_integer() else number
+
+
 class LexnetQueries:
     """Search operations used by the GUI, kept independent of the web UI."""
 
@@ -100,6 +174,7 @@ class LexnetQueries:
                 'subscript': _text(entry.get('subscript')),
                 'superscript': _text(entry.get('superscript')),
                 'lexnum': '',
+                'confidence': _confidence(entry.get('entry_%')),
             }
             for entry_id, entry in self.entries.iterrows()
         }
@@ -108,10 +183,11 @@ class LexnetQueries:
             entry_id = node.get('entry_id')
             label = dict(self.entry_labels.get(entry_id, {
                 'name': _text(node.get('std_name')) or _text(node_id),
-                'subscript': '', 'superscript': '', 'lexnum': '',
+                'subscript': '', 'superscript': '', 'lexnum': '', 'confidence': 100,
             }))
             label['name'] = _node_naming_form(node, label['name'])
             label['lexnum'] = _text(node.get('lexnum'))
+            label['confidence'] = _confidence(node.get('node_%'))
             self.node_labels[node_id] = label
         self.entry_names = {key: _name_text(value) for key, value in self.entry_labels.items()}
         self.node_names = {key: _name_text(value) for key, value in self.node_labels.items()}
@@ -341,8 +417,15 @@ class LexnetQueries:
                     lines.append(plain)
 
         self._append_wordforms(lines, node_id)
-        self._append_semantic_labels(lines, node_id)
-        self._append_simple_rows(lines, 'PROPOSITIONAL FORMS', self.data.get('propforms'), node_id, ['propform'])
+        semantic_label_links = self.semantic_label_links(node_id)
+        if semantic_label_links:
+            lines.extend(['', 'SEMANTIC LABELS'])
+            lines.extend(link['line'] for link in semantic_label_links)
+
+        propositional_form_links = self.propositional_form_links(node_id)
+        if propositional_form_links:
+            lines.extend(['', 'PROPOSITIONAL FORMS'])
+            lines.extend(link['line'] for link in propositional_form_links)
 
         relation_links = self.lexical_function_links(node_id)
         if relation_links:
@@ -353,16 +436,10 @@ class LexnetQueries:
                     lines.append(direction)
                     lines.extend(link['line'] for link in grouped_links)
 
-        ex_rel = self.data.get('ex-rel')
-        examples = self.data.get('examples')
-        if ex_rel is not None and examples is not None and not ex_rel.empty:
-            example_ids = ex_rel.loc[ex_rel['node_id'] == node_id, 'example_id']
-            matching_examples = examples.loc[examples.index.intersection(example_ids)]
-            if not matching_examples.empty:
-                lines.extend(['', 'EXAMPLES'])
-                for _, row in matching_examples.iterrows():
-                    content = re.sub(r'<[^>]+>', ' ', html.unescape(_text(row.get('content'))))
-                    lines.append(' • ' + re.sub(r'\s+', ' ', content).strip())
+        example_links = self.example_links(node_id)
+        if example_links:
+            lines.extend(['', 'EXAMPLES'])
+            lines.extend(link['line'] for link in example_links)
         return '\n'.join(lines)
 
     def describe_entry(self, entry_id):
@@ -441,6 +518,9 @@ class LexnetQueries:
                     'item_label': self.entry_labels.get(entry_id, {}),
                 })
             links.extend(self.lexical_function_links(item_id))
+            links.extend(self.semantic_label_links(item_id))
+            links.extend(self.propositional_form_links(item_id))
+            links.extend(self.example_links(item_id))
             return {
                 'title': 'Lexical unit', 'description': self.describe_node(item_id),
                 'links': links,
@@ -455,6 +535,69 @@ class LexnetQueries:
                 }, *self.entry_unit_links(item_id)],
             }
         return {'title': 'Inspector', 'error': f'Unknown item type: {item_type}'}
+
+    @staticmethod
+    def _confidence_link(text, value):
+        confidence = _confidence(value)
+        return {
+            'line': ' • ' + text,
+            'prefix': ' • ',
+            'suffix': '',
+            'information_text': text,
+            'confidence': confidence,
+            'low_confidence': confidence < 100,
+        }
+
+    def semantic_label_links(self, node_id):
+        """Return semantic labels with their confidence metadata."""
+        links = []
+        for _, row in _rows_for_index(self.data.get('labels'), node_id).iterrows():
+            semantic_label_id = row.get('semantic_label_id')
+            name = self.label_names.get(semantic_label_id, 'Unknown semantic label')
+            if name:
+                links.append(self._confidence_link(name, row.get('label_%')))
+        return links
+
+    def propositional_form_links(self, node_id):
+        """Return propositional forms with their confidence metadata."""
+        links = []
+        for _, row in _rows_for_index(self.data.get('propforms'), node_id).iterrows():
+            propform = _text(row.get('propform'))
+            if propform:
+                links.append(self._confidence_link(propform, row.get('propform_confid')))
+        return links
+
+    def example_links(self, node_id):
+        """Return ordered examples with confidence and marked keyword spans."""
+        relations = self.data.get('ex-rel')
+        examples = self.data.get('examples')
+        if relations is None or examples is None or relations.empty or examples.empty:
+            return []
+
+        rows = relations[relations['node_id'] == node_id]
+        ordered = sorted(rows.iterrows(), key=lambda pair: _number(pair[1].get('position')))
+        links = []
+        for _, relation in ordered:
+            example_id = relation.get('example_id')
+            if example_id not in examples.index:
+                continue
+            example = examples.loc[example_id]
+            if isinstance(example, pd.DataFrame):
+                example = example.iloc[0]
+            segments = _example_segments(example.get('content'), relation.get('occurrence'))
+            text = ''.join(segment['text'] for segment in segments)
+            if not text:
+                continue
+            confidence = _confidence(relation.get('%'))
+            links.append({
+                'line': ' • ' + text,
+                'prefix': ' • ',
+                'suffix': '',
+                'example_segments': segments,
+                'confidence': confidence,
+                'low_confidence': confidence < 100,
+            })
+        return links
 
     def lexical_function_links(self, node_id):
         """Return display text and navigation targets for a unit's LF relations."""
@@ -523,28 +666,3 @@ class LexnetQueries:
                 rendered.append(' • ' + value)
         if rendered:
             lines.extend(['', 'WORDFORMS', *rendered])
-
-    def _append_semantic_labels(self, lines, node_id):
-        rows = _rows_for_index(self.data.get('labels'), node_id)
-        rendered = []
-        for _, row in rows.iterrows():
-            semantic_label_id = row.get('semantic_label_id')
-            name = self.label_names.get(semantic_label_id, 'Unknown semantic label')
-            if name:
-                rendered.append(' • ' + name)
-        if rendered:
-            lines.extend(['', 'SEMANTIC LABELS', *rendered])
-
-    @staticmethod
-    def _append_simple_rows(lines, title, frame, node_id, columns):
-        rows = _rows_for_index(frame, node_id)
-        if rows.empty:
-            return
-        rendered = []
-        for _, row in rows.iterrows():
-            values = [_text(row.get(column)) for column in columns]
-            value = ' — '.join(filter(None, values))
-            if value:
-                rendered.append(' • ' + value)
-        if rendered:
-            lines.extend(['', title, *rendered])

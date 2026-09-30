@@ -43,6 +43,12 @@ tbody tr:hover { background: #edf6fc; }
 .inspector-section-content { padding-top: 4px; white-space: pre-wrap; }
 .inspector-list { margin: 4px 0 0; padding-left: 24px; white-space: normal; }
 .inspector-list li { margin: 2px 0; }
+.low-confidence { color: #8a949d; }
+.lexical-name.low-confidence .lexical-name-grammar,
+.lexical-name.low-confidence .lexical-name-homograph,
+.lexical-name.low-confidence .lexical-name-sense { color: inherit; }
+.example-occurrence { background: #c4e8fd; color: #471e00; font-weight: 600; }
+.low-confidence .example-occurrence { color: inherit; }
 .lf-values { display: inline; margin: 0; padding: 0; list-style: none; }
 .lf-values li { display: inline; }
 .lf-values li:not(:last-child)::after { content: ', '; }

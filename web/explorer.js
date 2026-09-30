@@ -68,6 +68,10 @@ function appendLfName(parent, name) {
 function appendLexicalName(parent, label) {
   const container = document.createElement('span');
   container.className = 'lexical-name';
+  if (label.confidence < 100) {
+    container.classList.add('low-confidence');
+    container.title = `Confidence: ${label.confidence}%`;
+  }
   const base = document.createElement('span');
   base.className = 'lexical-name-base'; base.textContent = label.name || '';
   container.append(base);
@@ -211,7 +215,30 @@ function renderDetails(payload) {
           ? relation.prefix.slice(3) : relation.prefix;
         parent.append(document.createTextNode(prefix));
       }
-      if (relation.items) {
+      if (relation.example_segments) {
+        const example = document.createElement('span');
+        example.className = 'example-text';
+        if (relation.low_confidence) {
+          example.classList.add('low-confidence');
+          example.title = `Confidence: ${relation.confidence}%`;
+        }
+        for (const segment of relation.example_segments) {
+          if (segment.highlighted) {
+            const mark = document.createElement('mark');
+            mark.className = 'example-occurrence'; mark.textContent = segment.text;
+            example.append(mark);
+          } else example.append(document.createTextNode(segment.text));
+        }
+        parent.append(example);
+      } else if (relation.information_text !== undefined) {
+        const information = document.createElement('span');
+        information.textContent = relation.information_text;
+        if (relation.low_confidence) {
+          information.className = 'low-confidence';
+          information.title = `Confidence: ${relation.confidence}%`;
+        }
+        parent.append(information);
+      } else if (relation.items) {
         const list = document.createElement('ul'); list.className = 'lf-values';
         for (const item of relation.items) {
           const listItem = document.createElement('li');
