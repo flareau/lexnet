@@ -53,7 +53,16 @@ tbody tr:hover { background: #edf6fc; }
 .lf-constraint::before { content: '('; }
 .lf-constraint::after { content: ')'; }
 .lf-name { font-family: "STIX Two Math", "Cambria Math", "Latin Modern Math", "Times New Roman", serif; font-size: 1.05em; }
-.lf-name sub, .lf-name sup { font-size: .72em; line-height: 0; }
+.lf-name-scripts, .lexical-name-scripts { display: inline-grid; margin-left: .1em; vertical-align: middle; }
+.lf-name-scripts > sup, .lf-name-scripts > sub,
+.lexical-name-scripts > sup, .lexical-name-scripts > sub { grid-area: 1 / 1; justify-self: start; font-size: .72em; line-height: 1; text-align: left; text-decoration: none; }
+.lf-name-scripts > sup, .lexical-name-scripts > sup { align-self: start; transform: translateY(-.58em); }
+.lf-name-scripts > sub, .lexical-name-scripts > sub { align-self: end; transform: translateY(.58em); }
+.lexical-name { white-space: nowrap; }
+.lexical-name-subscripts { display: flex; gap: .3em; }
+.lexical-name-grammar { color: #536475; }
+.lexical-name-homograph { color: #536475; }
+.lexical-name-sense { color: #6d7882; font-variant-numeric: tabular-nums; }
 .relation-group h3 { margin: 6px 0 2px; font-size: 14px; }
 .relation-group .inspector-list { margin-top: 2px; }
 .relation-group + .relation-group { margin-top: 8px; }

@@ -22,8 +22,13 @@ SCRIPT = SCRIPT_PATH.read_text(encoding='utf8')
 
 
 def _records(frame, limit=2000):
+    def json_value(value):
+        if isinstance(value, dict):
+            return {key: _text(item) for key, item in value.items()}
+        return _text(value)
+
     return [
-        {column: _text(value) for column, value in row.items()}
+        {column: json_value(value) for column, value in row.items()}
         for row in frame.head(limit).to_dict(orient='records')
     ]
 

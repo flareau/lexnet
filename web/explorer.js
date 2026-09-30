@@ -37,25 +37,63 @@ function appendLfName(parent, name) {
       continue;
     }
     flushText();
-    index += 1;
-    let end = index;
-    if (marker === '^') {
-      const roman = name.slice(index).match(/^(?:I\/II|III|II|I)(?![a-z])/);
-      if (roman) end += roman[0].length;
-    }
-    if (end === index) {
-      while (end < name.length) {
-        const character = name[end];
-        if (character === '_' || character === '^' || character === '•' || /[A-Z]/.test(character)) break;
-        end += 1;
+    const scripts = document.createElement('span');
+    scripts.className = 'lf-name-scripts';
+    while (name[index] === '_' || name[index] === '^') {
+      const scriptMarker = name[index];
+      index += 1;
+      let end = index;
+      if (scriptMarker === '^') {
+        const roman = name.slice(index).match(/^(?:I\/II|III|II|I)(?![a-z])/);
+        if (roman) end += roman[0].length;
       }
+      if (end === index) {
+        while (end < name.length) {
+          const character = name[end];
+          if (character === '_' || character === '^' || character === '•' || /[A-Z]/.test(character)) break;
+          end += 1;
+        }
+      }
+      const script = document.createElement(scriptMarker === '_' ? 'sub' : 'sup');
+      script.textContent = name.slice(index, end).trimEnd();
+      scripts.append(script);
+      index = end;
     }
-    const script = document.createElement(marker === '_' ? 'sub' : 'sup');
-    script.textContent = name.slice(index, end).trimEnd();
-    container.append(script);
-    index = end;
+    container.append(scripts);
   }
   flushText();
+  parent.append(container);
+}
+
+function appendLexicalName(parent, label) {
+  const container = document.createElement('span');
+  container.className = 'lexical-name';
+  const base = document.createElement('span');
+  base.className = 'lexical-name-base'; base.textContent = label.name || '';
+  container.append(base);
+  const scripts = document.createElement('span');
+  scripts.className = 'lexical-name-scripts';
+  if (label.superscript) {
+    const superscript = document.createElement('sup');
+    superscript.className = 'lexical-name-homograph'; superscript.textContent = label.superscript;
+    scripts.append(superscript);
+  }
+  if (label.subscript || label.lexnum) {
+    const subscripts = document.createElement('sub');
+    subscripts.className = 'lexical-name-subscripts';
+    if (label.subscript) {
+      const grammar = document.createElement('span');
+      grammar.className = 'lexical-name-grammar'; grammar.textContent = label.subscript;
+      subscripts.append(grammar);
+    }
+    if (label.lexnum) {
+      const sense = document.createElement('span');
+      sense.className = 'lexical-name-sense'; sense.textContent = label.lexnum;
+      subscripts.append(sense);
+    }
+    scripts.append(subscripts);
+  }
+  if (scripts.childNodes.length) container.append(scripts);
   parent.append(container);
 }
 
@@ -96,16 +134,23 @@ function renderRows() {
       const td=document.createElement('td'); td.title=row[key] || '';
       if ((kind === 'word' || kind === 'feature') && (key === 'entry_name' || key === 'std_name')) {
         const link=document.createElement('button');
-        link.type='button'; link.className='node-link'; link.textContent=row[key] || '';
+        link.type='button'; link.className='node-link';
+        appendLexicalName(link, key === 'entry_name' ? row.entry_label : row.unit_label);
         const itemType = key === 'entry_name' ? 'entry' : 'node';
         const itemId = key === 'entry_name' ? row.entry_id : row.node_id;
         link.addEventListener('click', () => showItem(itemType, itemId));
         td.append(link);
-      } else if (kind === 'lf' && (key === 'source_name' || key === 'target_name' || (key === 'form' && row.form))) {
+      } else if (kind === 'lf' && (key === 'source_name' || key === 'target_name')) {
         const link=document.createElement('button');
-        link.type='button'; link.className='node-link'; link.textContent=row[key] || '';
+        link.type='button'; link.className='node-link';
+        appendLexicalName(link, key === 'source_name' ? row.source_label : row.target_label);
         const nodeId = key === 'source_name' ? row.source_node_id : row.target_node_id;
         link.addEventListener('click', event => { event.stopPropagation(); showItem('node', nodeId); });
+        td.append(link);
+      } else if (kind === 'lf' && key === 'form' && row.form) {
+        const link=document.createElement('button');
+        link.type='button'; link.className='node-link'; link.textContent=row.form;
+        link.addEventListener('click', event => { event.stopPropagation(); showItem('node', row.target_node_id); });
         td.append(link);
       } else if (kind === 'lf' && key === 'lf_name') {
         appendLfName(td, row[key] || '');
@@ -177,7 +222,8 @@ function renderDetails(payload) {
             listItem.append(merged);
           }
           const link = document.createElement('button');
-          link.type='button'; link.className='node-link'; link.textContent=item.item_name;
+          link.type='button'; link.className='node-link';
+          appendLexicalName(link, item.item_label);
           link.addEventListener('click', () => showItem(item.item_type, item.item_id));
           listItem.append(link);
           if (item.frame) {
@@ -196,10 +242,13 @@ function renderDetails(payload) {
         }
         parent.append(list);
       } else {
-        const link = document.createElement('button');
-        link.type='button'; link.className='node-link'; link.textContent=relation.item_name;
-        link.addEventListener('click', () => showItem(relation.item_type, relation.item_id));
-        parent.append(link);
+        if (relation.item_type) {
+          const link = document.createElement('button');
+          link.type='button'; link.className='node-link';
+          appendLexicalName(link, relation.item_label);
+          link.addEventListener('click', () => showItem(relation.item_type, relation.item_id));
+          parent.append(link);
+        } else appendLexicalName(parent, relation.label);
       }
       parent.append(document.createTextNode(relation.suffix || ''));
     } else parent.append(document.createTextNode(removeBullet ? line.slice(3) : line));

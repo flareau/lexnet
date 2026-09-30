@@ -7,14 +7,16 @@ import pandas as pd
 
 
 EMPTY_WORD_RESULTS = [
-    'entry_id', 'entry_name', 'node_id', 'std_name', 'pos', 'match_source'
+    'entry_id', 'entry_name', 'entry_label', 'node_id', 'std_name', 'unit_label',
+    'pos', 'match_source'
 ]
 EMPTY_LF_RESULTS = [
     'lf_name', 'source_node_id', 'source_name', 'target_node_id', 'target_name',
-    'form', 'frame', 'constraint'
+    'source_label', 'target_label', 'form', 'frame', 'constraint'
 ]
 EMPTY_FEATURE_RESULTS = [
-    'entry_id', 'entry_name', 'node_id', 'std_name', 'matching_features'
+    'entry_id', 'entry_name', 'entry_label', 'node_id', 'std_name', 'unit_label',
+    'matching_features'
 ]
 
 
@@ -39,6 +41,29 @@ def _number(value):
         return int(value)
     except (TypeError, ValueError):
         return float('inf')
+
+
+def _name_text(label):
+    """Return the searchable plain-text form of a structured lexical name."""
+    text = label['name']
+    if label.get('subscript'):
+        text += '_' + label['subscript']
+    if label.get('superscript'):
+        text += '_' + label['superscript']
+    if label.get('lexnum'):
+        text += '_' + label['lexnum']
+    return text
+
+
+def _entry_naming_form(entry):
+    addition = _text(entry.get('addtoname'))
+    separator = ' ' if addition == 'se' else ''
+    return addition + separator + _text(entry.get('entry_name'))
+
+
+def _node_naming_form(node, fallback):
+    match = re.search(r"<span class='namingform'>([^<]+)</span>", _text(node.get('lexname')))
+    return html.unescape(match.group(1)) if match else fallback
 
 
 def _matches(series, query, mode='contains'):
@@ -68,9 +93,28 @@ class LexnetQueries:
         self.data = data
         self.nodes = data['nodes']
         self.entries = data['entries']
-        self.node_names = self.nodes['std_name'].fillna('').astype(str).to_dict()
-        self.entry_names = self.entries['entry_name'].fillna('').astype(str).to_dict()
         self.node_entries = self.nodes['entry_id'].to_dict()
+        self.entry_labels = {
+            entry_id: {
+                'name': _entry_naming_form(entry) or _text(entry_id),
+                'subscript': _text(entry.get('subscript')),
+                'superscript': _text(entry.get('superscript')),
+                'lexnum': '',
+            }
+            for entry_id, entry in self.entries.iterrows()
+        }
+        self.node_labels = {}
+        for node_id, node in self.nodes.iterrows():
+            entry_id = node.get('entry_id')
+            label = dict(self.entry_labels.get(entry_id, {
+                'name': _text(node.get('std_name')) or _text(node_id),
+                'subscript': '', 'superscript': '', 'lexnum': '',
+            }))
+            label['name'] = _node_naming_form(node, label['name'])
+            label['lexnum'] = _text(node.get('lexnum'))
+            self.node_labels[node_id] = label
+        self.entry_names = {key: _name_text(value) for key, value in self.entry_labels.items()}
+        self.node_names = {key: _name_text(value) for key, value in self.node_labels.items()}
         self.lf_table = data['lf_names']
         self.lf_names = self.lf_table['lf_name'].fillna('').astype(str).to_dict()
         self.lf_order = {
@@ -130,8 +174,10 @@ class LexnetQueries:
             rows.append({
                 'entry_id': entry_id,
                 'entry_name': self.entry_names.get(entry_id, ''),
+                'entry_label': self.entry_labels.get(entry_id, {}),
                 'node_id': node_id,
-                'std_name': _text(node.get('std_name')),
+                'std_name': self.node_names.get(node_id, _text(node.get('std_name'))),
+                'unit_label': self.node_labels.get(node_id, {}),
                 'pos': pos,
                 'match_source': ', '.join(sorted(sources.get(node_id, {'unit'}))),
             })
@@ -171,8 +217,10 @@ class LexnetQueries:
                 'lf_name': self.lf_names.get(lexical_function_id, _text(lexical_function_id)),
                 'source_node_id': source_node_id,
                 'source_name': self.node_names.get(source_node_id, _text(source_node_id)),
+                'source_label': self.node_labels.get(source_node_id, {}),
                 'target_node_id': target_node_id,
                 'target_name': self.node_names.get(target_node_id, _text(target_node_id)),
+                'target_label': self.node_labels.get(target_node_id, {}),
                 'form': _text(relation.get('form')),
                 'frame': _text(relation.get('frame')),
                 'constraint': _text(relation.get('constraint')),
@@ -242,8 +290,10 @@ class LexnetQueries:
             rows.append({
                 'entry_id': entry_id,
                 'entry_name': self.entry_names.get(entry_id, ''),
+                'entry_label': self.entry_labels.get(entry_id, {}),
                 'node_id': node_id,
-                'std_name': _text(node.get('std_name')),
+                'std_name': self.node_names.get(node_id, _text(node.get('std_name'))),
+                'unit_label': self.node_labels.get(node_id, {}),
                 'matching_features': ', '.join(
                     sorted((self.feature_names.get(fid, _text(fid)) for fid in shown_ids), key=str.casefold)
                 ),
@@ -259,7 +309,7 @@ class LexnetQueries:
         node = self.nodes.loc[node_id]
         entry_id = node['entry_id']
         lines = [
-            _text(node.get('std_name')) or _text(node_id),
+            self.node_names.get(node_id, _text(node_id)),
             f'Entry: {self.entry_names.get(entry_id, _text(entry_id))}',
         ]
 
@@ -321,12 +371,11 @@ class LexnetQueries:
             return f'Unknown lexical entry: {entry_id}'
         entry = self.entries.loc[entry_id]
         lines = [
-            _text(entry.get('entry_name')) or _text(entry_id),
+            self.entry_names.get(entry_id, _text(entry_id)),
         ]
         metadata = []
         for column, label in [
-            ('addtoname', 'Additional name'), ('subscript', 'Subscript'),
-            ('superscript', 'Superscript'), ('entry_status', 'Status'),
+            ('subscript', 'Subscript'), ('superscript', 'Superscript'), ('entry_status', 'Status'),
             ('entry_%', 'Confidence'),
         ]:
             value = _text(entry.get(column))
@@ -348,13 +397,14 @@ class LexnetQueries:
         for node_id, node in units.sort_values(
             'std_name', key=lambda values: values.fillna('').astype(str).str.casefold()
         ).iterrows():
-            name = _text(node.get('std_name')) or _text(node_id)
+            name = self.node_names.get(node_id, _text(node_id))
             grammar = self._node_grammar_summary(node_id)
             suffix = f'  [{grammar}]' if grammar else ''
             links.append({
                 'line': ' • ' + name + suffix,
                 'prefix': ' • ', 'suffix': suffix,
                 'item_type': 'node', 'item_id': _text(node_id), 'item_name': name,
+                'item_label': self.node_labels.get(node_id, {}),
             })
         return links
 
@@ -376,7 +426,11 @@ class LexnetQueries:
         """Return a generic payload for the browser inspector."""
         if item_type == 'node':
             entry_id = self.node_entries.get(item_id)
-            links = []
+            node_name = self.node_names.get(item_id, _text(item_id))
+            links = [{
+                'line': node_name, 'prefix': '', 'suffix': '',
+                'label': self.node_labels.get(item_id, {}),
+            }]
             if entry_id is not None:
                 name = self.entry_names.get(entry_id, _text(entry_id))
                 prefix, suffix = 'Entry: ', ''
@@ -384,6 +438,7 @@ class LexnetQueries:
                     'line': prefix + name + suffix,
                     'prefix': prefix, 'suffix': suffix,
                     'item_type': 'entry', 'item_id': _text(entry_id), 'item_name': name,
+                    'item_label': self.entry_labels.get(entry_id, {}),
                 })
             links.extend(self.lexical_function_links(item_id))
             return {
@@ -391,9 +446,13 @@ class LexnetQueries:
                 'links': links,
             }
         if item_type == 'entry':
+            name = self.entry_names.get(item_id, _text(item_id))
             return {
                 'title': 'Lexical entry', 'description': self.describe_entry(item_id),
-                'links': self.entry_unit_links(item_id),
+                'links': [{
+                    'line': name, 'prefix': '', 'suffix': '',
+                    'label': self.entry_labels.get(item_id, {}),
+                }, *self.entry_unit_links(item_id)],
             }
         return {'title': 'Inspector', 'error': f'Unknown item type: {item_type}'}
 
@@ -414,6 +473,7 @@ class LexnetQueries:
                     'item_type': 'node',
                     'item_id': _text(related_id),
                     'item_name': name,
+                    'item_label': self.node_labels.get(related_id, {}),
                     'frame': _text(row.get('frame')),
                     'constraint': _text(row.get('constraint')),
                     'merged': related_id_column == 'target_node_id' and _text(row.get('merged')) == '1',

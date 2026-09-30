@@ -295,6 +295,9 @@ def load(path, sources=None, columns=None, separator=DEFAULT_SEPARATOR, encoding
     }
 
     ln['nodes'].set_index('node_id', inplace=True)
+    ln['entries']['superscript'] = pd.to_numeric(
+        ln['entries']['superscript'], errors='raise'
+    ).astype('Int64')
     ln['entries'].set_index('entry_id', inplace=True)
     ln['forms'].set_index('node_id', inplace=True)
     ln['labels'].set_index('node_id', inplace=True)

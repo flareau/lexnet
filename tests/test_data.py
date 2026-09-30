@@ -40,6 +40,11 @@ class TestRealDataIntegration(unittest.TestCase):
         self.assertIn('features', self.ln['features'].columns)
         self.assertIn('propform', self.ln['propforms'].columns)
 
+    def test_entry_superscripts_are_nullable_integers(self):
+        superscripts = self.ln['entries']['superscript']
+        self.assertEqual(str(superscripts.dtype), 'Int64')
+        self.assertTrue(superscripts.dropna().map(lambda value: isinstance(value, int)).all())
+
     def test_single_record_tables_have_unique_indexes(self):
         tables = {
             'nodes', 'entries', 'features', 'labels', 'propforms',
