@@ -1,0 +1,23 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "lexnet"
+version = "0.1.0"
+description = "Utilities for loading and exploring Lexical Systems"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "pandas",
+]
+
+[project.scripts]
+lexnet-explorer = "explorer:main"
+
+[tool.setuptools]
+py-modules = ["lexnet", "loader", "models", "explorer", "explorer_queries"]
+packages = ["web"]
+
+[tool.setuptools.package-data]
+web = ["*.html", "*.css", "*.js"]

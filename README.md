@@ -7,6 +7,12 @@ Utilities to load Lexical Network export files into Pandas DataFrames and Python
 - Python 3.10+
 - `pandas`
 
+## Installation
+
+```bash
+pip install .
+```
+
 ## Project Layout
 
 - `loader.py`: loads data into dataframes
@@ -50,6 +56,8 @@ Launch the lightweight read-only interface with a LexNet export folder:
 
 ```bash
 python explorer.py /path/to/data
+# or, after installation:
+lexnet-explorer /path/to/data
 ```
 
 The explorer starts a server bound to `127.0.0.1` and opens its private local
