@@ -33,6 +33,14 @@ def _text(value):
     return str(value)
 
 
+def _number(value):
+    """Return a sortable number, placing missing or malformed values last."""
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return float('inf')
+
+
 def _matches(series, query, mode='contains'):
     values = series.fillna('').astype(str).str.casefold()
     query = query.casefold()
@@ -65,6 +73,15 @@ class LexnetQueries:
         self.node_entries = self.nodes['entry_id'].to_dict()
         self.lf_table = data['lf_names']
         self.lf_names = self.lf_table['lf_name'].fillna('').astype(str).to_dict()
+        self.lf_order = {
+            lexical_function_id: (
+                _number(row.get('group_index')),
+                _number(row.get('family_index')),
+                _text(row.get('lf_name')).casefold(),
+                _text(lexical_function_id),
+            )
+            for lexical_function_id, row in self.lf_table.iterrows()
+        }
         self.feature_names = data['feature_names']['name'].fillna('').astype(str).to_dict()
         self.form_names = self._name_map(data.get('form_names'))
         self.label_names = self._name_map(data.get('label_names'))
@@ -393,16 +410,27 @@ class LexnetQueries:
                 function_id = row['lexical_function_id']
                 related_id = row[related_id_column]
                 name = self.node_names.get(related_id, _text(related_id))
-                groups.setdefault(function_id, []).append({
+                item = {
                     'item_type': 'node',
                     'item_id': _text(related_id),
                     'item_name': name,
-                })
-            for function_id, items in groups.items():
+                    'frame': _text(row.get('frame')),
+                    'constraint': _text(row.get('constraint')),
+                    'merged': related_id_column == 'target_node_id' and _text(row.get('merged')) == '1',
+                }
+                groups.setdefault(function_id, []).append((_number(row.get('position')), item))
+            fallback = (float('inf'), float('inf'), '', '')
+            for function_id in sorted(groups, key=lambda item: self.lf_order.get(item, fallback)):
+                items = [item for _, item in sorted(groups[function_id], key=lambda pair: pair[0])]
                 function_name = self.lf_names.get(function_id, function_id)
                 prefix = f'{function_name}: '
+                def item_text(item):
+                    merged = '//' if item['merged'] else ''
+                    frame = f" {item['frame']}" if item['frame'] else ''
+                    constraint = f" ({item['constraint']})" if item['constraint'] else ''
+                    return merged + item['item_name'] + frame + constraint
                 links.append({
-                    'line': prefix + ', '.join(item['item_name'] for item in items),
+                    'line': prefix + ', '.join(item_text(item) for item in items),
                     'prefix': prefix,
                     'suffix': '',
                     'function_name': _text(function_name),

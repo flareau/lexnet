@@ -42,9 +42,9 @@ class TestLexnetQueries(unittest.TestCase):
                 {'lexical_function_id': 'lf2', 'lf_name': 'Oper1', 'type': 'standard', 'family_id': 'fam2', 'family_name': 'Support verbs', 'group_index': 2, 'family_index': 1, 'lf_index': 1},
             ]).set_index('lexical_function_id'),
             'lfs': pd.DataFrame([
-                {'source_node_id': 'n1', 'lexical_function_id': 'lf1', 'target_node_id': 'n2', 'form': '', 'frame': '', 'constraint': ''},
-                {'source_node_id': 'n1', 'lexical_function_id': 'lf1', 'target_node_id': 'n3', 'form': '', 'frame': '', 'constraint': ''},
-                {'source_node_id': 'n3', 'lexical_function_id': 'lf2', 'target_node_id': 'n1', 'form': 'prendre', 'frame': '', 'constraint': ''},
+                {'source_node_id': 'n1', 'lexical_function_id': 'lf1', 'target_node_id': 'n2', 'form': '', 'frame': 'N=$2', 'constraint': '', 'merged': 0},
+                {'source_node_id': 'n1', 'lexical_function_id': 'lf1', 'target_node_id': 'n3', 'form': '', 'frame': '', 'constraint': 'postposé', 'merged': 1},
+                {'source_node_id': 'n3', 'lexical_function_id': 'lf2', 'target_node_id': 'n1', 'form': 'prendre', 'frame': '', 'constraint': '', 'merged': 1},
             ]),
             'definitions': pd.DataFrame(columns=['node_id', 'def_HTML']).set_index('node_id'),
             'labels': pd.DataFrame([
@@ -104,13 +104,39 @@ class TestLexnetQueries(unittest.TestCase):
     def test_lexical_function_links_group_alternative_values(self):
         links = self.queries.lexical_function_links('n1')
         magn = links[0]
-        self.assertEqual(magn['line'], 'Magn: chat II, prendre le large')
+        self.assertEqual(magn['line'], 'Magn: chat II N=$2, //prendre le large (postposé)')
         self.assertEqual(magn['function_name'], 'Magn')
         self.assertEqual(magn['direction'], 'Outgoing')
         self.assertEqual([item['item_id'] for item in magn['items']], ['n2', 'n3'])
+        self.assertEqual(magn['items'][0]['frame'], 'N=$2')
+        self.assertEqual(magn['items'][1]['constraint'], 'postposé')
+        self.assertFalse(magn['items'][0]['merged'])
+        self.assertTrue(magn['items'][1]['merged'])
         self.assertEqual(magn['line'].count('Magn'), 1)
         self.assertEqual(links[1]['direction'], 'Incoming')
         self.assertEqual(links[1]['items'][0]['item_id'], 'n3')
+        self.assertFalse(links[1]['items'][0]['merged'])
+
+    def test_lexical_function_links_follow_model_and_value_order(self):
+        data = dict(self.data)
+        data['lf_names'] = pd.DataFrame([
+            {'lexical_function_id': 'late', 'lf_name': 'Late', 'group_index': 2, 'family_index': 1},
+            {'lexical_function_id': 'zeta', 'lf_name': 'Zeta', 'group_index': 1, 'family_index': 1},
+            {'lexical_function_id': 'alpha', 'lf_name': 'Alpha', 'group_index': 1, 'family_index': 1},
+            {'lexical_function_id': 'family2', 'lf_name': 'FamilyTwo', 'group_index': 1, 'family_index': 2},
+        ]).set_index('lexical_function_id')
+        data['lfs'] = pd.DataFrame([
+            {'source_node_id': 'n1', 'lexical_function_id': 'late', 'target_node_id': 'n2', 'position': 1},
+            {'source_node_id': 'n1', 'lexical_function_id': 'zeta', 'target_node_id': 'n2', 'position': 2},
+            {'source_node_id': 'n1', 'lexical_function_id': 'family2', 'target_node_id': 'n2', 'position': 1},
+            {'source_node_id': 'n1', 'lexical_function_id': 'alpha', 'target_node_id': 'n2', 'position': 1},
+            {'source_node_id': 'n1', 'lexical_function_id': 'zeta', 'target_node_id': 'n3', 'position': 1},
+        ])
+
+        links = LexnetQueries(data).lexical_function_links('n1')
+
+        self.assertEqual([link['function_name'] for link in links], ['Alpha', 'Zeta', 'FamilyTwo', 'Late'])
+        self.assertEqual([item['item_id'] for item in links[1]['items']], ['n3', 'n2'])
 
     def test_entry_inspector_lists_units_with_grammar(self):
         payload = self.queries.inspector_payload('entry', 'e1')
@@ -137,6 +163,9 @@ class TestLexnetQueries(unittest.TestCase):
         self.assertIn("document.createElement('ul')", script)
         self.assertIn('lf-values', script)
         self.assertIn('lf-name', script)
+        self.assertIn('lf-frame', script)
+        self.assertIn('lf-constraint', script)
+        self.assertIn('lf-merge', script)
         self.assertIn("atomicLfNames = ['De_nouveau']", script)
         self.assertIn("document.createElement(marker === '_' ? 'sub' : 'sup')", script)
 

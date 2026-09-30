@@ -170,10 +170,29 @@ function renderDetails(payload) {
         const list = document.createElement('ul'); list.className = 'lf-values';
         for (const item of relation.items) {
           const listItem = document.createElement('li');
+          if (item.merged) {
+            const merged = document.createElement('span');
+            merged.className = 'lf-merge'; merged.title = 'Merged value';
+            merged.setAttribute('aria-label', 'Merged value');
+            listItem.append(merged);
+          }
           const link = document.createElement('button');
           link.type='button'; link.className='node-link'; link.textContent=item.item_name;
           link.addEventListener('click', () => showItem(item.item_type, item.item_id));
-          listItem.append(link); list.append(listItem);
+          listItem.append(link);
+          if (item.frame) {
+            const frame = document.createElement('span');
+            frame.className = 'lf-frame'; frame.textContent = item.frame;
+            frame.title = 'Syntactic frame'; frame.setAttribute('aria-label', `Syntactic frame: ${item.frame}`);
+            listItem.append(frame);
+          }
+          if (item.constraint) {
+            const constraint = document.createElement('span');
+            constraint.className = 'lf-constraint'; constraint.textContent = item.constraint;
+            constraint.title = 'Constraint'; constraint.setAttribute('aria-label', `Constraint: ${item.constraint}`);
+            listItem.append(constraint);
+          }
+          list.append(listItem);
         }
         parent.append(list);
       } else {
