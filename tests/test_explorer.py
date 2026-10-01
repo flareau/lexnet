@@ -4,7 +4,7 @@ from io import BytesIO
 
 import pandas as pd
 
-from explorer import CSS_PATH, PAGE_PATH, SCRIPT_PATH, create_handler
+from explorer import CSS_PATH, DAGRE_PATH, PAGE_PATH, SCRIPT_PATH, create_handler
 from explorer_queries import LexnetQueries, _example_segments, _propform_segments, split_query
 
 
@@ -58,6 +58,17 @@ class TestLexnetQueries(unittest.TestCase):
                 {'source_node_id': 'n1', 'lexical_function_id': 'lf1', 'target_node_id': 'n2', 'form': '', 'frame': 'N=$2', 'constraint': '', 'merged': 0},
                 {'source_node_id': 'n1', 'lexical_function_id': 'lf1', 'target_node_id': 'n3', 'form': '', 'frame': '', 'constraint': 'postposé', 'merged': 1},
                 {'source_node_id': 'n3', 'lexical_function_id': 'lf2', 'target_node_id': 'n1', 'form': 'prendre', 'frame': '', 'constraint': '', 'merged': 1},
+            ]),
+            'copolysemy_types': pd.DataFrame([
+                {'cp_type': 'ct1', 'name': 'Métaphore', 'order': 2, 'semantics': 0, 'derivation': True},
+                {'cp_type': 'ct2', 'name': 'Extension', 'order': 1, 'semantics': 1, 'derivation': False},
+            ]).set_index('cp_type'),
+            'copolysemy_subtypes': pd.DataFrame([
+                {'cp_subtype': 'cs1', 'cp_type': 'ct1', 'name': 'Forme'},
+            ]).set_index('cp_subtype'),
+            'copolysemy': pd.DataFrame([
+                {'source_node_id': 'n1', 'target_node_id': 'n2', 'cp_type': 'ct1', 'cp_subtype': 'cs1'},
+                {'source_node_id': 'n2', 'target_node_id': 'n1', 'cp_type': 'ct2', 'cp_subtype': None},
             ]),
             'definitions': pd.DataFrame(columns=['node_id', 'def_HTML']).set_index('node_id'),
             'labels': pd.DataFrame([
@@ -229,6 +240,23 @@ class TestLexnetQueries(unittest.TestCase):
             payload['links'][1]['unit_annotations']['propforms'][0]['text'],
             'X est un Y',
         )
+        self.assertGreater(
+            payload['description'].index('COPOLYSEMY GRAPH'),
+            payload['description'].index('LEXICAL UNITS'),
+        )
+
+    def test_entry_inspector_exposes_directed_copolysemy_graph(self):
+        graph = self.queries.inspector_payload('entry', 'e1')['copolysemy_graph']
+
+        self.assertEqual([node['item_id'] for node in graph['nodes']], ['n1', 'n2'])
+        self.assertEqual(len(graph['edges']), 2)
+        self.assertEqual(graph['edges'][0]['type_name'], 'Métaphore')
+        self.assertEqual(graph['edges'][0]['subtype_name'], 'Forme')
+        self.assertFalse(graph['edges'][1]['derivation'])
+        self.assertEqual(
+            {(edge['source_id'], edge['target_id']) for edge in graph['edges']},
+            {('n1', 'n2'), ('n2', 'n1')},
+        )
 
     def test_node_inspector_links_back_to_its_entry(self):
         payload = self.queries.inspector_payload('node', 'n1')
@@ -293,11 +321,13 @@ class TestLexnetQueries(unittest.TestCase):
         self.assertTrue(PAGE_PATH.is_file())
         self.assertTrue(CSS_PATH.is_file())
         self.assertTrue(SCRIPT_PATH.is_file())
+        self.assertTrue(DAGRE_PATH.is_file())
         page = PAGE_PATH.read_text(encoding='utf8')
         script = SCRIPT_PATH.read_text(encoding='utf8')
         self.assertIn('<title>LexNet Explorer</title>', page)
         self.assertIn('explorer.css', page)
         self.assertIn('explorer.js', page)
+        self.assertIn('vendor/dagre.min.js', page)
         self.assertIn('Semantic labels', page)
         self.assertIn('semantic-browser', page)
         self.assertIn('main-resizer', page)
@@ -313,6 +343,8 @@ class TestLexnetQueries(unittest.TestCase):
         self.assertIn("title !== 'ENTRY INFORMATION'", script)
         self.assertIn('lexical-name-sense', script)
         self.assertIn('lexical-name-scripts', script)
+        self.assertIn('COPOLYSEMY GRAPH', script)
+        self.assertIn('copolysemy-graph', script)
         self.assertIn('example-occurrence', script)
         self.assertIn("atomicLfNames = ['De_nouveau']", script)
         self.assertIn("document.createElement(scriptMarker === '_' ? 'sub' : 'sup')", script)
@@ -344,6 +376,7 @@ class TestLexnetQueries(unittest.TestCase):
         stylesheet = stylesheet_body.decode('utf-8')
         _, script_type, script_body = get('/explorer.js')
         script = script_body.decode('utf-8')
+        _, dagre_type, dagre_body = get('/vendor/dagre.min.js')
         _, _, meta_body = get('/api/meta')
         meta_payload = json.loads(meta_body)
         _, _, search_body = get('/api/search?kind=word&q=chat&mode=exact&forms=1')
@@ -364,6 +397,8 @@ class TestLexnetQueries(unittest.TestCase):
         self.assertEqual(stylesheet_type, 'text/css')
         self.assertIn('function sortBy(key)', script)
         self.assertEqual(script_type, 'text/javascript')
+        self.assertEqual(dagre_type, 'text/javascript')
+        self.assertIn(b'graphlib', dagre_body)
         self.assertEqual(meta_payload['semantic_hierarchy'][0]['count'], 1)
         self.assertTrue(meta_payload['semantic_hierarchy'][1]['semantic_field'])
         self.assertEqual({row['node_id'] for row in payload['rows']}, {'n1', 'n2'})

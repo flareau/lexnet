@@ -16,9 +16,11 @@ WEB_PATH = Path(__file__).with_name('web')
 PAGE_PATH = WEB_PATH / 'explorer.html'
 CSS_PATH = WEB_PATH / 'explorer.css'
 SCRIPT_PATH = WEB_PATH / 'explorer.js'
+DAGRE_PATH = WEB_PATH / 'vendor' / 'dagre.min.js'
 PAGE = PAGE_PATH.read_text(encoding='utf8')
 CSS = CSS_PATH.read_text(encoding='utf8')
 SCRIPT = SCRIPT_PATH.read_text(encoding='utf8')
+DAGRE = DAGRE_PATH.read_bytes()
 
 
 def _records(frame, limit=2000):
@@ -48,6 +50,8 @@ def create_handler(queries, data_path):
                     return self._send(CSS, 'text/css; charset=utf-8')
                 if request.path == '/explorer.js':
                     return self._send(SCRIPT, 'text/javascript; charset=utf-8')
+                if request.path == '/vendor/dagre.min.js':
+                    return self._send(DAGRE, 'text/javascript; charset=utf-8')
                 if request.path == '/favicon.ico':
                     return self._send(b'', 'image/x-icon', status=204)
                 if request.path == '/api/meta':

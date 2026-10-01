@@ -104,4 +104,25 @@ tbody tr:hover { background: #edf6fc; }
 .relation-group h3 { margin: 6px 0 2px; font-size: 14px; }
 .relation-group .inspector-list { margin-top: 2px; }
 .relation-group + .relation-group { margin-top: 8px; }
+.copolysemy-graph { margin-top: 5px; overflow: auto; border: 1px solid #e1e6eb; border-radius: 6px; background: #fbfcfd; }
+.copolysemy-svg { display: block; margin: auto; overflow: visible; }
+.copolysemy-svg-edge { fill: none; stroke-width: 1.7px; }
+.copolysemy-svg-edge.copolysemy-nonderivational { stroke-dasharray: 5 4; }
+.copolysemy-svg-edge-label text { fill: #536475; stroke: #fbfcfd; stroke-width: 4px; stroke-linejoin: round; paint-order: stroke; font: 11px system-ui, sans-serif; text-anchor: middle; }
+.copolysemy-svg-node { display: flex; width: 100%; height: 100%; padding: 2px; }
+.copolysemy-node { display: flex; align-items: center; justify-content: center; width: 100%; height: 100%; padding: 4px 7px; border: 1px solid #97a6b4; border-radius: 4px; background: white; color: #0878ba; text-decoration: none; box-shadow: 0 1px 2px #17212b12; }
+.copolysemy-node:hover, .copolysemy-node:focus { border-color: #1683c7; background: #edf6fc; color: #064f79; outline: none; }
+.copolysemy-measurement { position: absolute; top: 0; left: -10000px; visibility: hidden; white-space: nowrap; }
+.copolysemy-measurement .copolysemy-node { width: auto; height: auto; }
+.copolysemy-legend { display: flex; flex-direction: column; gap: 5px; margin-top: 7px; color: #6d7882; font-size: 11px; white-space: normal; }
+.copolysemy-legend > div { display: flex; gap: 8px; align-items: baseline; }
+.copolysemy-legend > div > span { color: #536475; font-weight: 600; }
+.copolysemy-legend ul { display: flex; flex-wrap: wrap; gap: 4px 12px; margin: 0; padding: 0; list-style: none; }
+.copolysemy-legend li { display: flex; gap: 5px; align-items: center; }
+.copolysemy-legend-line { display: inline-block; width: 22px; border-top: 2px solid #536475; }
+.copolysemy-legend-weight-0 { border-color: #aeb9c4; }
+.copolysemy-legend-weight-1 { border-color: #6d7882; }
+.copolysemy-legend-weight-2 { border-color: #17324d; }
+.copolysemy-legend-nonderivational { border-top-style: dashed; }
+.copolysemy-empty { margin: 4px 0 0; color: #8a949d; font-style: italic; }
 @media (max-width: 850px) { main { height: auto; grid-template-columns: 1fr; gap: 16px; } .main-resizer { display: none; } .card { min-height: 500px; } .details { min-height: 500px; } .semantic-mode .results-area { flex-direction: column; } .semantic-mode .semantic-browser { flex: 0 0 320px; width: 100%; min-width: 0; border-bottom: 1px solid #d8dee5; } .semantic-mode .semantic-resizer { display: none; } }

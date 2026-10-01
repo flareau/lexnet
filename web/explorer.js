@@ -14,6 +14,7 @@ const results = document.querySelector('#results');
 const head = document.querySelector('#head');
 
 const atomicLfNames = ['De_nouveau'];
+let copolysemyGraphCounter = 0;
 
 function appendLfName(parent, name, semanticSegments=null) {
   const container = document.createElement('span');
@@ -238,7 +239,7 @@ function renderDetails(payload) {
   const sectionTitles = new Set([
     'ENTRY INFORMATION', 'LEXICAL UNITS', 'GRAMMATICAL INFORMATION',
     'DEFINITION', 'WORDFORMS', 'SEMANTIC LABELS', 'PROPOSITIONAL FORMS',
-    'LEXICAL RELATIONS', 'EXAMPLES', 'LABEL INFORMATION', 'CLASSIFICATION',
+    'LEXICAL RELATIONS', 'COPOLYSEMY GRAPH', 'EXAMPLES', 'LABEL INFORMATION', 'CLASSIFICATION',
     'CLASS INFORMATION', 'PARENTS', 'SUBCLASSES', 'DIRECT LABELS'
   ]);
   function appendLine(parent, line, removeBullet=false) {
@@ -372,6 +373,150 @@ function renderDetails(payload) {
       }
     }
   }
+  function createCopolysemyNode(itemId, itemLabel) {
+    const link = document.createElement('button');
+    link.type = 'button'; link.className = 'node-link copolysemy-node';
+    appendLexicalName(link, itemLabel);
+    link.addEventListener('click', () => showItem('node', itemId));
+    return link;
+  }
+  function appendCopolysemyGraph(parent, graph) {
+    const nodes = graph?.nodes || [];
+    const edges = graph?.edges || [];
+    if (!nodes.length) {
+      const empty = document.createElement('p');
+      empty.className = 'copolysemy-empty'; empty.textContent = 'No lexical units.';
+      parent.append(empty);
+      return;
+    }
+    if (!window.dagre) {
+      const error = document.createElement('p');
+      error.className = 'copolysemy-empty'; error.textContent = 'Graph layout is unavailable.';
+      parent.append(error);
+      return;
+    }
+
+    const measurement = document.createElement('div');
+    measurement.className = 'copolysemy-measurement'; document.body.append(measurement);
+    const dimensions = new Map();
+    for (const node of nodes) {
+      const link = createCopolysemyNode(node.item_id, node.item_label);
+      measurement.replaceChildren(link);
+      const bounds = link.getBoundingClientRect();
+      dimensions.set(node.item_id, {
+        width: Math.min(260, Math.max(68, Math.ceil(bounds.width) + 6)),
+        height: Math.max(30, Math.ceil(bounds.height) + 8),
+      });
+    }
+    measurement.remove();
+
+    const layout = new window.dagre.graphlib.Graph({multigraph: true})
+      .setGraph({
+        rankdir: 'TB', acyclicer: 'greedy', ranker: 'network-simplex',
+        nodesep: 30, edgesep: 18, ranksep: 66, marginx: 18, marginy: 18,
+      })
+      .setDefaultEdgeLabel(() => ({}));
+    for (const node of nodes) {
+      layout.setNode(node.item_id, {...dimensions.get(node.item_id), node});
+    }
+    edges.forEach((edge, index) => {
+      const label = edge.type_name + (edge.subtype_name ? ` · ${edge.subtype_name}` : '');
+      layout.setEdge(edge.source_id, edge.target_id, {
+        edge, label, width: Math.min(190, Math.max(54, label.length * 6.5 + 10)), height: 18,
+        labelpos: 'c', labeloffset: 0,
+      }, `edge-${index}`);
+    });
+    window.dagre.layout(layout);
+
+    const namespace = 'http://www.w3.org/2000/svg';
+    const svgElement = (name, attributes={}) => {
+      const element = document.createElementNS(namespace, name);
+      for (const [key, value] of Object.entries(attributes)) element.setAttribute(key, value);
+      return element;
+    };
+    const graphId = `copolysemy-${++copolysemyGraphCounter}`;
+    const bounds = layout.graph();
+    const viewport = document.createElement('div'); viewport.className = 'copolysemy-graph';
+    const svg = svgElement('svg', {
+      class: 'copolysemy-svg', width: Math.ceil(bounds.width), height: Math.ceil(bounds.height),
+      viewBox: `0 0 ${Math.ceil(bounds.width)} ${Math.ceil(bounds.height)}`,
+      role: 'img', 'aria-label': 'Copolysemy graph',
+    });
+    const definitions = svgElement('defs');
+    const edgeColor = semantics => ['#aeb9c4', '#6d7882', '#17324d'][semantics] || '#536475';
+    for (const semantics of ['default', 0, 1, 2]) {
+      const marker = svgElement('marker', {
+        id: `${graphId}-arrow-${semantics}`, viewBox: '0 0 8 8', refX: 7, refY: 4,
+        markerWidth: 7, markerHeight: 7, orient: 'auto-start-reverse',
+      });
+      marker.append(svgElement('path', {
+        d: 'M 0 0 L 8 4 L 0 8 z', fill: semantics === 'default' ? '#536475' : edgeColor(semantics),
+      }));
+      definitions.append(marker);
+    }
+    svg.append(definitions);
+
+    for (const edgeKey of layout.edges()) {
+      const positioned = layout.edge(edgeKey);
+      const edge = positioned.edge;
+      const semantics = [0, 1, 2].includes(edge.semantics) ? edge.semantics : 'default';
+      const path = svgElement('path', {
+        class: 'copolysemy-svg-edge' + (edge.derivation === false ? ' copolysemy-nonderivational' : ''),
+        d: positioned.points.map((point, index) => `${index ? 'L' : 'M'} ${point.x} ${point.y}`).join(' '),
+        stroke: semantics === 'default' ? '#536475' : edgeColor(semantics),
+        'marker-end': `url(#${graphId}-arrow-${semantics})`,
+      });
+      const metadata = [];
+      if (edge.semantics !== null) metadata.push(`Semantic weight: ${edge.semantics}`);
+      if (edge.derivation !== null) metadata.push(edge.derivation ? 'Derivational' : 'Non-derivational');
+      if (metadata.length) {
+        const title = svgElement('title'); title.textContent = metadata.join('; '); path.append(title);
+      }
+      svg.append(path);
+      const label = svgElement('g', {class: 'copolysemy-svg-edge-label'});
+      const text = svgElement('text', {x: positioned.x, y: positioned.y, dy: '.35em'});
+      text.textContent = positioned.label; label.append(text); svg.append(label);
+    }
+
+    for (const nodeId of layout.nodes()) {
+      const positioned = layout.node(nodeId);
+      const foreignObject = svgElement('foreignObject', {
+        x: positioned.x - positioned.width / 2, y: positioned.y - positioned.height / 2,
+        width: positioned.width, height: positioned.height,
+      });
+      const wrapper = document.createElement('div'); wrapper.className = 'copolysemy-svg-node';
+      wrapper.append(createCopolysemyNode(nodeId, positioned.node.item_label));
+      foreignObject.append(wrapper); svg.append(foreignObject);
+    }
+    viewport.append(svg); parent.append(viewport);
+    if (edges.length) {
+      const legend = document.createElement('aside');
+      legend.className = 'copolysemy-legend'; legend.setAttribute('aria-label', 'Graph legend');
+      const addGroup = (title, items) => {
+        const group = document.createElement('div');
+        const heading = document.createElement('span'); heading.textContent = title;
+        const list = document.createElement('ul');
+        for (const [className, text] of items) {
+          const item = document.createElement('li');
+          const swatch = document.createElement('span');
+          swatch.className = `copolysemy-legend-line ${className}`;
+          swatch.setAttribute('aria-hidden', 'true');
+          item.append(swatch, document.createTextNode(text)); list.append(item);
+        }
+        group.append(heading, list); legend.append(group);
+      };
+      addGroup('Semantic weight', [
+        ['copolysemy-legend-weight-0', '0 · none'],
+        ['copolysemy-legend-weight-1', '1 · intermediate'],
+        ['copolysemy-legend-weight-2', '2 · maximum'],
+      ]);
+      addGroup('Derivation', [
+        ['', 'derivational'],
+        ['copolysemy-legend-nonderivational', 'non-derivational'],
+      ]);
+      parent.append(legend);
+    }
+  }
   let index = 0;
   while (index < lines.length) {
     if (sectionTitles.has(lines[index])) {
@@ -384,13 +529,17 @@ function renderDetails(payload) {
       section.className = 'inspector-section';
       section.open = title !== 'WORDFORMS' && title !== 'ENTRY INFORMATION';
       const summary = document.createElement('summary');
-      const itemCount = sectionLines.filter(line => line && line !== 'Outgoing' && line !== 'Incoming').length;
+      const itemCount = title === 'COPOLYSEMY GRAPH'
+        ? (payload.copolysemy_graph?.edges || []).length
+        : sectionLines.filter(line => line && line !== 'Outgoing' && line !== 'Incoming').length;
       summary.textContent = `${title} (${itemCount})`;
       const body = document.createElement('div');
       body.className = 'inspector-section-content';
       const manualBullets = sectionLines.length > 0 && sectionLines.every(line => line.startsWith(' • '));
       if (title === 'LEXICAL RELATIONS') {
         appendRelationGroups(body, sectionLines);
+      } else if (title === 'COPOLYSEMY GRAPH') {
+        appendCopolysemyGraph(body, payload.copolysemy_graph);
       } else if (manualBullets) {
         const list = document.createElement('ul'); list.className = 'inspector-list';
         for (const line of sectionLines) {

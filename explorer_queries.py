@@ -298,6 +298,8 @@ class LexnetQueries:
             label_relations['semantic_label_id'].value_counts().to_dict()
             if label_relations is not None and not label_relations.empty else {}
         )
+        self.copolysemy_types = data.get('copolysemy_types', pd.DataFrame())
+        self.copolysemy_subtypes = data.get('copolysemy_subtypes', pd.DataFrame())
 
     @staticmethod
     def _name_map(frame):
@@ -689,6 +691,7 @@ class LexnetQueries:
         if unit_links:
             lines.extend(['', 'LEXICAL UNITS'])
             lines.extend(link['line'] for link in unit_links)
+        lines.extend(['', 'COPOLYSEMY GRAPH'])
         return '\n'.join(lines)
 
     def entry_unit_links(self, entry_id):
@@ -730,6 +733,58 @@ class LexnetQueries:
             })
         return links
 
+    def entry_copolysemy_graph(self, entry_id):
+        """Return the directed copolysemy graph for a lexical entry."""
+        units = self.nodes[self.nodes['entry_id'] == entry_id]
+        nodes = [{
+            'item_type': 'node',
+            'item_id': _text(node_id),
+            'item_label': self.node_labels.get(node_id, {}),
+        } for node_id in units.sort_values(
+            'std_name', key=lambda values: values.fillna('').astype(str).str.casefold()
+        ).index]
+        node_order = {node['item_id']: index for index, node in enumerate(nodes)}
+        unit_ids = set(units.index)
+        relations = self.data.get('copolysemy', pd.DataFrame())
+        if relations.empty:
+            return {'nodes': nodes, 'edges': []}
+        relations = relations[
+            relations['source_node_id'].isin(unit_ids)
+            & relations['target_node_id'].isin(unit_ids)
+        ]
+        edges = []
+        for _, relation in relations.iterrows():
+            cp_type = relation['cp_type']
+            cp_subtype = relation.get('cp_subtype')
+            type_data = (
+                self.copolysemy_types.loc[cp_type]
+                if cp_type in self.copolysemy_types.index else {}
+            )
+            subtype_data = (
+                self.copolysemy_subtypes.loc[cp_subtype]
+                if cp_subtype in self.copolysemy_subtypes.index else {}
+            )
+            semantics = type_data.get('semantics')
+            derivation = type_data.get('derivation')
+            edges.append({
+                'source_id': _text(relation['source_node_id']),
+                'source_label': self.node_labels.get(relation['source_node_id'], {}),
+                'target_id': _text(relation['target_node_id']),
+                'target_label': self.node_labels.get(relation['target_node_id'], {}),
+                'type': _text(cp_type),
+                'type_name': _text(type_data.get('name')) or _text(cp_type),
+                'subtype': _text(cp_subtype),
+                'subtype_name': _text(subtype_data.get('name')),
+                'semantics': int(semantics) if _text(semantics) else None,
+                'derivation': bool(derivation) if _text(derivation) else None,
+            })
+        edges.sort(key=lambda edge: (
+            node_order[edge['source_id']], node_order[edge['target_id']],
+            edge['type_name'].casefold(),
+            edge['subtype_name'].casefold(),
+        ))
+        return {'nodes': nodes, 'edges': edges}
+
     def inspector_payload(self, item_type, item_id):
         """Return a generic payload for the browser inspector."""
         if item_type == 'node':
@@ -760,6 +815,7 @@ class LexnetQueries:
             name = self.entry_names.get(item_id, _text(item_id))
             return {
                 'title': 'Lexical entry', 'description': self.describe_entry(item_id),
+                'copolysemy_graph': self.entry_copolysemy_graph(item_id),
                 'links': [{
                     'line': name, 'prefix': '', 'suffix': '',
                     'label': self.entry_labels.get(item_id, {}),
