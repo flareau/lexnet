@@ -52,7 +52,17 @@
     </div>
   </section>
   <div class="main-resizer" id="main-resizer" role="separator" aria-label="Resize browser and inspector" aria-orientation="vertical" aria-valuemin="520" tabindex="0"></div>
-  <section class="card details"><h2 id="inspector-title">Inspector</h2><div class="inspector-content" id="details">Select a result to inspect it.</div></section>
+  <section class="card details">
+    <div class="inspector-header">
+      <div class="inspector-history-control">
+        <button type="button" id="inspector-back" disabled aria-label="Return to the previous inspected item">← Back</button>
+        <button type="button" id="inspector-history-toggle" disabled aria-label="Show inspector history" aria-haspopup="menu" aria-expanded="false">▾</button>
+        <ul id="inspector-history-menu" role="menu" hidden></ul>
+      </div>
+      <h2 id="inspector-title">Inspector</h2>
+    </div>
+    <div class="inspector-content" id="details">Select a result to inspect it.</div>
+  </section>
 </main>
 <script src="/vendor/dagre.min.js"></script>
 <script src="/explorer.js"></script>

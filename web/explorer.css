@@ -67,7 +67,20 @@ tbody tr:hover { background: #edf6fc; }
 .node-link { padding: 0; border: 0; background: transparent; color: #0878ba; font: inherit; text-decoration: underline; cursor: pointer; }
 .node-link:hover, .node-link:focus { color: #064f79; }
 .details { display: flex; flex-direction: column; }
-.details h2 { font-size: 16px; margin: 0; padding: 14px; border-bottom: 1px solid #d8dee5; }
+.inspector-header { display: flex; align-items: center; gap: 10px; min-height: 49px; padding: 8px 14px; border-bottom: 1px solid #d8dee5; }
+.details h2 { flex: 1; min-width: 0; margin: 0; font-size: 16px; }
+.inspector-history-control { position: relative; display: flex; }
+#inspector-back, #inspector-history-toggle { padding: 4px 8px; border: 1px solid #97a6b4; background: white; color: #0878ba; font: inherit; cursor: pointer; }
+#inspector-back { border-radius: 4px 0 0 4px; }
+#inspector-history-toggle { margin-left: -1px; padding-inline: 6px; border-radius: 0 4px 4px 0; }
+#inspector-back:hover, #inspector-back:focus, #inspector-history-toggle:hover, #inspector-history-toggle:focus { position: relative; border-color: #1683c7; background: #edf6fc; color: #064f79; outline: none; }
+#inspector-back:disabled, #inspector-history-toggle:disabled { border-color: #d8dee5; background: #f7f9fa; color: #a0aab3; cursor: default; }
+#inspector-history-menu { position: absolute; z-index: 30; top: calc(100% + 4px); left: 0; width: max-content; min-width: 220px; max-width: min(360px, 75vw); max-height: 320px; margin: 0; padding: 4px 0; overflow-y: auto; border: 1px solid #aeb9c4; border-radius: 5px; background: white; box-shadow: 0 5px 16px #17212b24; list-style: none; }
+#inspector-history-menu[hidden] { display: none; }
+#inspector-history-menu button { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 12px; width: 100%; padding: 6px 10px; border: 0; background: white; color: #273746; font: inherit; text-align: left; cursor: pointer; }
+#inspector-history-menu button:hover, #inspector-history-menu button:focus { background: #edf6fc; color: #064f79; outline: none; }
+.inspector-history-label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.inspector-history-type { color: #8a949d; font-size: 11px; }
 .inspector-content { flex: 1; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; padding: 16px; font: 14px/1.5 system-ui, sans-serif; }
 .inspector-section summary { color: #17212b; cursor: pointer; font-weight: 600; }
 .inspector-section summary:hover, .inspector-section summary:focus { color: #0878ba; }

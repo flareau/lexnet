@@ -12,6 +12,12 @@ const collator = new Intl.Collator(undefined, {numeric: true, sensitivity: 'base
 const status = document.querySelector('#status');
 const results = document.querySelector('#results');
 const head = document.querySelector('#head');
+const inspectorBack = document.querySelector('#inspector-back');
+const inspectorHistoryToggle = document.querySelector('#inspector-history-toggle');
+const inspectorHistoryMenu = document.querySelector('#inspector-history-menu');
+const inspectorHistory = [];
+const inspectorHistoryLimit = 100;
+let currentInspectorItem = null;
 
 const atomicLfNames = ['De_nouveau'];
 let copolysemyGraphCounter = 0;
@@ -219,12 +225,71 @@ async function search(event) {
     renderHead(); renderRows();
   } catch (error) { status.textContent = error.message; }
 }
-async function showItem(itemType, itemId) {
+function updateInspectorBack() {
+  const empty = inspectorHistory.length === 0;
+  inspectorBack.disabled = empty;
+  inspectorHistoryToggle.disabled = empty;
+  inspectorBack.title = inspectorHistory.length
+    ? `Back to the previous item (${inspectorHistory.length} in history)` : 'No previous item';
+  inspectorHistoryMenu.replaceChildren();
+  [...inspectorHistory].reverse().forEach((item, reverseIndex) => {
+    const listItem = document.createElement('li'); listItem.role = 'none';
+    const button = document.createElement('button'); button.type = 'button'; button.role = 'menuitem';
+    const label = document.createElement('span');
+    label.className = 'inspector-history-label'; label.textContent = item.label || item.itemId;
+    const type = document.createElement('span');
+    type.className = 'inspector-history-type'; type.textContent = item.itemType.replace('_', ' ');
+    button.append(label, type);
+    button.addEventListener('click', async () => {
+      const index = inspectorHistory.length - reverseIndex - 1;
+      const target = inspectorHistory[index];
+      inspectorHistory.splice(index);
+      inspectorHistoryMenu.hidden = true;
+      inspectorHistoryToggle.setAttribute('aria-expanded', 'false');
+      updateInspectorBack();
+      await showItem(target.itemType, target.itemId, false);
+    });
+    listItem.append(button); inspectorHistoryMenu.append(listItem);
+  });
+}
+async function showItem(itemType, itemId, remember=true) {
   const params = new URLSearchParams({type: itemType, id: itemId});
   const response = await fetch('/api/inspect?' + params);
   const payload = await response.json();
+  if (remember && currentInspectorItem
+      && (currentInspectorItem.itemType !== itemType || currentInspectorItem.itemId !== itemId)) {
+    inspectorHistory.push(currentInspectorItem);
+    if (inspectorHistory.length > inspectorHistoryLimit) inspectorHistory.shift();
+  }
+  const label = (payload.description || '').split('\n').find(line => line.trim()) || itemId;
+  currentInspectorItem = {itemType, itemId, label};
+  updateInspectorBack();
   renderDetails(payload);
 }
+inspectorBack.addEventListener('click', async () => {
+  const previous = inspectorHistory.pop();
+  if (!previous) return;
+  inspectorHistoryMenu.hidden = true;
+  inspectorHistoryToggle.setAttribute('aria-expanded', 'false');
+  updateInspectorBack();
+  await showItem(previous.itemType, previous.itemId, false);
+});
+inspectorHistoryToggle.addEventListener('click', () => {
+  inspectorHistoryMenu.hidden = !inspectorHistoryMenu.hidden;
+  inspectorHistoryToggle.setAttribute('aria-expanded', String(!inspectorHistoryMenu.hidden));
+  if (!inspectorHistoryMenu.hidden) inspectorHistoryMenu.querySelector('button')?.focus();
+});
+document.addEventListener('click', event => {
+  if (event.target.closest('.inspector-history-control')) return;
+  inspectorHistoryMenu.hidden = true;
+  inspectorHistoryToggle.setAttribute('aria-expanded', 'false');
+});
+document.addEventListener('keydown', event => {
+  if (event.key !== 'Escape' || inspectorHistoryMenu.hidden) return;
+  inspectorHistoryMenu.hidden = true;
+  inspectorHistoryToggle.setAttribute('aria-expanded', 'false');
+  inspectorHistoryToggle.focus();
+});
 function renderDetails(payload) {
   const inspector = document.querySelector('#details');
   document.querySelector('#inspector-title').textContent = payload.title || 'Inspector';
