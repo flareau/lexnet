@@ -228,6 +228,35 @@ def _propform_segments(propform, actants):
     return _actant_segments(propform, labels)
 
 
+def _lf_frame_segments(frame, labels, lf_aliases):
+    """Mark actants and LF names embedded in a syntactic frame."""
+    text = _text(frame)
+    aliases = sorted(lf_aliases, key=len, reverse=True)
+    lf_pattern = '|'.join(re.escape(alias) for alias in aliases)
+    pattern = r'\$(\d+(?:\.\d+)?)'
+    if lf_pattern:
+        pattern += rf'|(?<![\w])({lf_pattern})(?![\w])'
+    segments = []
+    position = 0
+    for match in re.finditer(pattern, text):
+        if match.start() > position:
+            segments.append({'text': text[position:match.start()]})
+        if match.group(1):
+            key = match.group(1)
+            label = labels.get(key)
+            segments.append(
+                {'text': label, 'actant': '$' + key} if label
+                else {'text': match.group(0)}
+            )
+        else:
+            alias = match.group(2)
+            segments.append({'text': alias, 'function_name': lf_aliases[alias]})
+        position = match.end()
+    if position < len(text):
+        segments.append({'text': text[position:]})
+    return segments
+
+
 class LexnetQueries:
     """Search operations used by the GUI, kept independent of the web UI."""
 
@@ -261,6 +290,12 @@ class LexnetQueries:
         self.node_names = {key: _name_text(value) for key, value in self.node_labels.items()}
         self.lf_table = data['lf_names']
         self.lf_names = self.lf_table['lf_name'].fillna('').astype(str).to_dict()
+        self.frame_lf_aliases = {}
+        for name in self.lf_names.values():
+            if not re.fullmatch(r'[A-Za-z]+_[A-Za-z]+(?:\^[A-Za-z]+)?', name):
+                continue
+            self.frame_lf_aliases[name] = name
+            self.frame_lf_aliases[name.replace('_', '-')] = name
         self.lf_display_names = {
             function_id: ''.join(
                 segment['text'] for segment in _actant_segments(name, DEFAULT_ACTANT_LABELS)
@@ -1066,6 +1101,11 @@ class LexnetQueries:
                     'item_name': name,
                     'item_label': self.node_labels.get(related_id, {}),
                     'frame': _text(row.get('frame')),
+                    'frame_segments': _lf_frame_segments(
+                        row.get('frame'),
+                        {**DEFAULT_ACTANT_LABELS, **self.node_actants.get(row['source_node_id'], {})},
+                        self.frame_lf_aliases,
+                    ),
                     'constraint': _text(row.get('constraint')),
                     'merged': related_id_column == 'target_node_id' and _text(row.get('merged')) == '1',
                 }

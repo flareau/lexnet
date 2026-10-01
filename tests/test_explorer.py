@@ -6,8 +6,8 @@ import pandas as pd
 
 from explorer import CSS_PATH, DAGRE_PATH, PAGE_PATH, SCRIPT_PATH, create_handler
 from explorer_queries import (
-    LexnetQueries, _example_segments, _propform_segments, _semantic_derivation_name,
-    split_query,
+    LexnetQueries, _example_segments, _lf_frame_segments, _propform_segments,
+    _semantic_derivation_name, split_query,
 )
 
 
@@ -56,9 +56,10 @@ class TestLexnetQueries(unittest.TestCase):
             'lf_names': pd.DataFrame([
                 {'lexical_function_id': 'lf1', 'lf_name': 'Magn', 'type': 'standard', 'family_id': 'fam1', 'family_name': 'Intensity', 'group_index': 1, 'family_index': 1, 'lf_index': 1},
                 {'lexical_function_id': 'lf2', 'lf_name': 'Oper1', 'type': 'standard', 'family_id': 'fam2', 'family_name': 'Support verbs', 'group_index': 2, 'family_index': 1, 'lf_index': 1},
+                {'lexical_function_id': 'lf-loc', 'lf_name': 'Loc_in', 'type': 'standard', 'family_id': 'fam3', 'family_name': 'Locatives', 'group_index': 2, 'family_index': 2, 'lf_index': 1},
             ]).set_index('lexical_function_id'),
             'lfs': pd.DataFrame([
-                {'source_node_id': 'n1', 'lexical_function_id': 'lf1', 'target_node_id': 'n2', 'form': '', 'frame': 'N=$2', 'constraint': '', 'merged': 0},
+                {'source_node_id': 'n1', 'lexical_function_id': 'lf1', 'target_node_id': 'n2', 'form': '', 'frame': 'N=$2 Loc-in ART ~', 'constraint': '', 'merged': 0},
                 {'source_node_id': 'n1', 'lexical_function_id': 'lf1', 'target_node_id': 'n3', 'form': '', 'frame': '', 'constraint': 'postposé', 'merged': 1},
                 {'source_node_id': 'n3', 'lexical_function_id': 'lf2', 'target_node_id': 'n1', 'form': 'prendre', 'frame': '', 'constraint': '', 'merged': 1},
             ]),
@@ -187,11 +188,18 @@ class TestLexnetQueries(unittest.TestCase):
     def test_lexical_function_links_group_alternative_values(self):
         links = self.queries.lexical_function_links('n1')
         magn = links[0]
-        self.assertEqual(magn['line'], 'Magn: chat_N, masc_1_II N=$2, //prendre le large (postposé)')
+        self.assertEqual(magn['line'], 'Magn: chat_N, masc_1_II N=$2 Loc-in ART ~, //prendre le large (postposé)')
         self.assertEqual(magn['function_name'], 'Magn')
         self.assertEqual(magn['direction'], 'Outgoing')
         self.assertEqual([item['item_id'] for item in magn['items']], ['n2', 'n3'])
-        self.assertEqual(magn['items'][0]['frame'], 'N=$2')
+        self.assertEqual(magn['items'][0]['frame'], 'N=$2 Loc-in ART ~')
+        self.assertEqual(magn['items'][0]['frame_segments'], [
+            {'text': 'N='},
+            {'text': 'Y', 'actant': '$2'},
+            {'text': ' '},
+            {'text': 'Loc-in', 'function_name': 'Loc_in'},
+            {'text': ' ART ~'},
+        ])
         self.assertEqual(magn['items'][1]['constraint'], 'postposé')
         self.assertFalse(magn['items'][0]['merged'])
         self.assertTrue(magn['items'][1]['merged'])
@@ -316,6 +324,21 @@ class TestLexnetQueries(unittest.TestCase):
         mismatched = _propform_segments('~ sur $1', '($2=X)')
         self.assertEqual(''.join(segment['text'] for segment in mismatched), '~ sur X')
 
+    def test_lf_frame_segments_mark_functions_and_resolve_actants(self):
+        segments = _lf_frame_segments(
+            'N=$1 Loc-in ART ~', {'1': 'qqn'}, {'Loc-in': 'Loc_in'},
+        )
+
+        self.assertEqual(''.join(segment['text'] for segment in segments), 'N=qqn Loc-in ART ~')
+        self.assertEqual(
+            next(segment for segment in segments if segment.get('actant')),
+            {'text': 'qqn', 'actant': '$1'},
+        )
+        self.assertEqual(
+            next(segment for segment in segments if segment.get('function_name')),
+            {'text': 'Loc-in', 'function_name': 'Loc_in'},
+        )
+
     def test_examples_follow_position_and_mark_occurrences(self):
         links = self.queries.example_links('n1')
 
@@ -357,11 +380,13 @@ class TestLexnetQueries(unittest.TestCase):
         self.assertIn('inspector-history-toggle', page)
         self.assertIn('inspector-history-menu', page)
         self.assertIn('inspector-section', script)
+        self.assertIn('inspector-item-title', script)
         self.assertIn("document.createElement('ul')", script)
         self.assertIn('lf-values', script)
         self.assertIn('lf-name', script)
         self.assertIn('lf-name-scripts', script)
         self.assertIn('lf-frame', script)
+        self.assertIn('function appendLfFrame', script)
         self.assertIn('lf-constraint', script)
         self.assertIn('lf-merge', script)
         self.assertIn('function appendLexicalName', script)

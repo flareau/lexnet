@@ -135,6 +135,18 @@ function appendSemanticSegments(parent, segments) {
   }
 }
 
+function appendLfFrame(parent, segments) {
+  for (const segment of segments || []) {
+    if (segment.function_name) {
+      appendLfName(parent, segment.function_name);
+    } else if (segment.actant) {
+      appendSemanticSegments(parent, [segment]);
+    } else {
+      parent.append(document.createTextNode(segment.text));
+    }
+  }
+}
+
 function selectTab(next) {
   kind = next;
   currentRows = []; sortKey = null; sortAscending = true;
@@ -371,7 +383,7 @@ function renderDetails(payload) {
           listItem.append(link);
           if (item.frame) {
             const frame = document.createElement('span');
-            frame.className = 'lf-frame'; frame.textContent = item.frame;
+            frame.className = 'lf-frame'; appendLfFrame(frame, item.frame_segments);
             frame.title = 'Syntactic frame'; frame.setAttribute('aria-label', `Syntactic frame: ${item.frame}`);
             listItem.append(frame);
           }
@@ -622,7 +634,11 @@ function renderDetails(payload) {
     parent.append(list, more);
     return load;
   }
-  let index = 0;
+  const itemTitle = document.createElement('h3');
+  itemTitle.className = 'inspector-item-title';
+  appendLine(itemTitle, lines[0]);
+  content.append(itemTitle);
+  let index = lines[1] === '' ? 2 : 1;
   while (index < lines.length) {
     if (sectionTitles.has(lines[index])) {
       const title = lines[index];

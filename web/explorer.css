@@ -84,6 +84,9 @@ tbody tr:hover { background: #edf6fc; }
 .inspector-history-label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .inspector-history-type { color: #8a949d; font-size: 11px; }
 .inspector-content { flex: 1; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; padding: 16px; font: 14px/1.5 system-ui, sans-serif; }
+.inspector-item-title { margin: 0 0 16px; color: #17212b; font-size: 23px; font-weight: 700; line-height: 1.2; letter-spacing: -.015em; }
+.inspector-item-title .node-link { color: inherit; text-decoration: none; }
+.inspector-item-title .node-link:hover, .inspector-item-title .node-link:focus { color: #0878ba; }
 .inspector-section summary { color: #17212b; cursor: pointer; font-weight: 600; }
 .inspector-section summary:hover, .inspector-section summary:focus { color: #0878ba; }
 .inspector-section-content { padding-top: 4px; white-space: pre-wrap; }
@@ -105,7 +108,7 @@ tbody tr:hover { background: #edf6fc; }
 .lf-constraint { margin-left: .35em; color: #6d7882; font-size: .92em; }
 .lf-constraint::before { content: '('; }
 .lf-constraint::after { content: ')'; }
-.lf-name { font-family: "STIX Two Math", "Cambria Math", "Latin Modern Math", "Times New Roman", serif; font-size: 1.05em; }
+.lf-name { font-family: "STIX Two Math", "Cambria Math", "Latin Modern Math", "Times New Roman", serif; font-size: 1.05em; font-weight: 600; }
 .lf-name-scripts, .lexical-name-scripts { display: inline-grid; margin-left: .1em; vertical-align: middle; }
 .lf-name-scripts > sup, .lf-name-scripts > sub,
 .lexical-name-scripts > sup, .lexical-name-scripts > sub { grid-area: 1 / 1; justify-self: start; font-size: .72em; line-height: 1; text-align: left; text-decoration: none; }
