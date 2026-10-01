@@ -65,12 +65,13 @@ def create_handler(queries, data_path):
                         'lf_hierarchy': queries.lexical_function_hierarchy(),
                         'features': sorted(set(queries.feature_names.values()), key=str.casefold),
                         'semantic_hierarchy': queries.semantic_class_hierarchy(),
-                        'semantic_labels': sorted(set(queries.label_names.values()), key=str.casefold),
                     })
                 if request.path == '/api/inspect':
                     return self._json(queries.inspector_payload(
                         self._param(params, 'type'), self._param(params, 'id')
                     ))
+                if request.path == '/api/semantic-units':
+                    return self._semantic_units(params)
                 if request.path == '/api/node':
                     return self._json(queries.inspector_payload('node', self._param(params, 'id')))
                 if request.path == '/api/search':
@@ -126,6 +127,20 @@ def create_handler(queries, data_path):
             if len(result) > 2000:
                 summary += ' Showing the first 2,000 rows.'
             return self._json({'status': summary, 'rows': _records(result)})
+
+        def _semantic_units(self, params):
+            item_type = self._param(params, 'type')
+            item_id = self._param(params, 'id')
+            offset = max(0, int(self._param(params, 'offset', '0')))
+            limit = min(500, max(1, int(self._param(params, 'limit', '200'))))
+            result = queries.semantic_unit_results(item_type, item_id)
+            page = result.iloc[offset:offset + limit]
+            next_offset = offset + len(page)
+            return self._json({
+                'rows': _records(page, limit),
+                'count': len(result),
+                'next_offset': next_offset if next_offset < len(result) else None,
+            })
 
         @staticmethod
         def _param(params, name, default=''):

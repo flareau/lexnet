@@ -14,7 +14,7 @@
       <button class="tab active" data-kind="word">Words</button>
       <button class="tab" data-kind="lf">Lexical functions</button>
       <button class="tab" data-kind="feature">Features</button>
-      <button class="tab" data-kind="semantic">Semantic labels</button>
+      <button class="tab" data-kind="semantic">Semantic hierarchy</button>
     </nav>
     <form class="panel active" id="word-panel" data-kind="word">
       <div class="controls"><input type="text" name="q" placeholder="Search a word…" autofocus><select name="mode"><option>contains</option><option>starts with</option><option>exact</option></select><button class="search">Search</button></div>
@@ -36,10 +36,7 @@
       <div class="options"><label><input type="radio" name="combine" value="any" checked> Match any</label><label><input type="radio" name="combine" value="all"> Match all</label></div>
     </form>
     <form class="panel" id="semantic-panel" data-kind="semantic">
-      <div class="controls"><input type="text" name="q" list="semantic-label-names" placeholder="Search or filter classes and labels…"><datalist id="semantic-label-names"></datalist><button class="search">Search</button></div>
-      <input type="hidden" name="class_id" value="">
-      <input type="hidden" name="semantic_label_id" value="">
-      <label class="options"><span><input type="checkbox" name="descendants" checked> Include descendants</span></label>
+      <div class="controls"><input type="text" name="q" list="semantic-class-names" placeholder="Filter classes…"><datalist id="semantic-class-names"></datalist></div>
     </form>
     <div class="status" id="status">Ready.</div>
     <div class="results-area">
@@ -47,7 +44,6 @@
         <div class="semantic-browser-header"><strong>Semantic hierarchy</strong><span><button type="button" id="semantic-expand">Expand all</button><button type="button" id="semantic-collapse">Collapse all</button></span></div>
         <div class="semantic-tree" id="semantic-tree"></div>
       </aside>
-      <div class="semantic-resizer" id="semantic-resizer" role="separator" aria-label="Resize semantic hierarchy" aria-orientation="vertical" aria-valuemin="240" tabindex="0"></div>
       <div class="table-wrap"><table><thead><tr id="head"></tr></thead><tbody id="results"></tbody></table></div>
     </div>
   </section>

@@ -305,7 +305,7 @@ function renderDetails(payload) {
     'ENTRY INFORMATION', 'LEXICAL UNITS', 'GRAMMATICAL INFORMATION',
     'DEFINITION', 'WORDFORMS', 'SEMANTIC LABELS', 'PROPOSITIONAL FORMS',
     'LEXICAL RELATIONS', 'COPOLYSEMY GRAPH', 'EXAMPLES', 'LABEL INFORMATION', 'CLASSIFICATION',
-    'CLASS INFORMATION', 'PARENTS', 'SUBCLASSES', 'DIRECT LABELS'
+    'CLASS INFORMATION', 'PARENTS', 'DESCENDANT CLASSES', 'SUBCLASSES', 'DIRECT LABELS'
   ]);
   function appendLine(parent, line, removeBullet=false) {
     const choices = links.get(line);
@@ -582,6 +582,46 @@ function renderDetails(payload) {
       parent.append(legend);
     }
   }
+  function appendSemanticUnits(parent, descriptor) {
+    const list = document.createElement('ul'); list.className = 'inspector-list semantic-unit-list';
+    const more = document.createElement('button');
+    more.type = 'button'; more.className = 'semantic-units-more'; more.textContent = 'Load lexical units';
+    let nextOffset = 0;
+    const load = async () => {
+      if (nextOffset === null) return;
+      more.disabled = true; more.textContent = 'Loading…';
+      const params = new URLSearchParams({
+        type: descriptor.item_type, id: descriptor.item_id,
+        offset: String(nextOffset), limit: '200',
+      });
+      try {
+        const response = await fetch('/api/semantic-units?' + params);
+        const payload = await response.json();
+        if (!response.ok) throw new Error(payload.error || 'Unable to load lexical units');
+        for (const row of payload.rows) {
+          const item = document.createElement('li');
+          if (Number(row.confidence) < 100) {
+            item.className = 'low-confidence'; item.title = `Confidence: ${row.confidence}%`;
+          }
+          const unit = document.createElement('button'); unit.type = 'button'; unit.className = 'node-link';
+          appendLexicalName(unit, row.unit_label);
+          unit.addEventListener('click', () => showItem('node', row.node_id));
+          item.append(unit); list.append(item);
+        }
+        nextOffset = payload.next_offset;
+        if (nextOffset === null) more.remove();
+        else {
+          more.disabled = false;
+          more.textContent = `Load more (${payload.count - nextOffset} remaining)`;
+        }
+      } catch (error) {
+        more.disabled = false; more.textContent = 'Retry'; more.title = error.message;
+      }
+    };
+    more.addEventListener('click', load);
+    parent.append(list, more);
+    return load;
+  }
   let index = 0;
   while (index < lines.length) {
     if (sectionTitles.has(lines[index])) {
@@ -592,10 +632,12 @@ function renderDetails(payload) {
       while (sectionLines.at(-1) === '') sectionLines.pop();
       const section = document.createElement('details');
       section.className = 'inspector-section';
+      const lazySemanticUnits = title === 'LEXICAL UNITS' && payload.semantic_units;
       section.open = title !== 'WORDFORMS' && title !== 'ENTRY INFORMATION';
       const summary = document.createElement('summary');
       const itemCount = title === 'COPOLYSEMY GRAPH'
         ? (payload.copolysemy_graph?.edges || []).length
+        : lazySemanticUnits ? payload.semantic_units.count
         : sectionLines.filter(line => line && line !== 'Outgoing' && line !== 'Incoming').length;
       summary.textContent = `${title} (${itemCount})`;
       const body = document.createElement('div');
@@ -605,6 +647,15 @@ function renderDetails(payload) {
         appendRelationGroups(body, sectionLines);
       } else if (title === 'COPOLYSEMY GRAPH') {
         appendCopolysemyGraph(body, payload.copolysemy_graph);
+      } else if (lazySemanticUnits) {
+        const load = appendSemanticUnits(body, payload.semantic_units);
+        section.dataset.loaded = 'true';
+        load();
+        section.addEventListener('toggle', () => {
+          if (section.open && !section.dataset.loaded) {
+            section.dataset.loaded = 'true'; load();
+          }
+        });
       } else if (manualBullets) {
         const list = document.createElement('ul'); list.className = 'inspector-list';
         for (const line of sectionLines) {
@@ -634,9 +685,8 @@ async function initialize() {
   for (const [target, values] of [['lf-names', meta.lexical_functions], ['feature-names', meta.features]]) {
     const list=document.querySelector('#'+target); for (const value of values) { const option=document.createElement('option'); option.value=value; list.append(option); }
   }
-  const semanticNames = new Set(meta.semantic_labels || []);
-  for (const item of meta.semantic_hierarchy || []) semanticNames.add(item.name);
-  const semanticNameList = document.querySelector('#semantic-label-names');
+  const semanticNames = new Set((meta.semantic_hierarchy || []).map(item => item.name));
+  const semanticNameList = document.querySelector('#semantic-class-names');
   for (const value of [...semanticNames].sort(collator.compare)) {
     const option=document.createElement('option'); option.value=value; semanticNameList.append(option);
   }
@@ -684,11 +734,6 @@ async function initialize() {
 
   const semanticForm = document.querySelector('#semantic-panel');
   const semanticInput = semanticForm.querySelector('input[name=q]');
-  const semanticClassValue = semanticForm.querySelector('input[name=class_id]');
-  const semanticLabelValue = semanticForm.querySelector('input[name=semantic_label_id]');
-  const semanticResults = document.querySelector('.results-area');
-  const semanticBrowser = document.querySelector('#semantic-browser');
-  const semanticResizer = document.querySelector('#semantic-resizer');
   const semanticTree = document.querySelector('#semantic-tree');
   const rootList = document.createElement('ul');
   semanticTree.append(rootList);
@@ -696,12 +741,9 @@ async function initialize() {
 
   function selectSemantic(itemType, itemId) {
     semanticInput.value = '';
-    semanticClassValue.value = itemType === 'semantic_class' ? itemId : '';
-    semanticLabelValue.value = itemType === 'semantic_label' ? itemId : '';
     semanticTree.querySelectorAll('.selected').forEach(item => item.classList.remove('selected'));
     semanticTree.querySelectorAll(`[data-item-id="${CSS.escape(itemId)}"]`).forEach(item => item.classList.add('selected'));
     filterSemanticTree('');
-    semanticForm.requestSubmit();
     showItem(itemType, itemId);
   }
 
@@ -710,6 +752,7 @@ async function initialize() {
     const parentList = levelLists[item.depth] || rootList;
     const listItem = document.createElement('li');
     const details = document.createElement('details');
+    if (!item.has_children) details.classList.add('semantic-leaf');
     details.open = item.depth < 2;
     const summary = document.createElement('summary');
     const button = document.createElement('button');
@@ -729,17 +772,6 @@ async function initialize() {
     count.className = 'semantic-tree-count'; count.textContent = item.count.toLocaleString();
     summary.append(count);
     const children = document.createElement('ul');
-    for (const label of item.labels || []) {
-      const labelItem = document.createElement('li');
-      labelItem.className = 'semantic-label-row';
-      const labelButton = document.createElement('button');
-      labelButton.type = 'button'; labelButton.className = 'semantic-tree-node semantic-tree-label';
-      labelButton.dataset.itemId = label.id; labelButton.textContent = label.name;
-      labelButton.addEventListener('click', () => selectSemantic('semantic_label', label.id));
-      const labelCount = document.createElement('span');
-      labelCount.className = 'semantic-tree-count'; labelCount.textContent = label.count.toLocaleString();
-      labelItem.append(labelButton, labelCount); children.append(labelItem);
-    }
     details.append(summary, children); listItem.append(details); parentList.append(listItem);
     levelLists[item.depth + 1] = children;
   }
@@ -762,72 +794,15 @@ async function initialize() {
   }
 
   semanticInput.addEventListener('input', () => {
-    semanticClassValue.value = ''; semanticLabelValue.value = '';
     semanticTree.querySelectorAll('.selected').forEach(item => item.classList.remove('selected'));
     filterSemanticTree(semanticInput.value);
   });
-  semanticForm.elements.descendants.addEventListener('change', () => {
-    if (semanticClassValue.value) semanticForm.requestSubmit();
-  });
+  semanticForm.addEventListener('submit', event => event.preventDefault());
   document.querySelector('#semantic-expand').addEventListener('click', () => {
     semanticTree.querySelectorAll('details').forEach(item => { item.open = true; });
   });
   document.querySelector('#semantic-collapse').addEventListener('click', () => {
     semanticTree.querySelectorAll('details').forEach(item => { item.open = false; });
-  });
-
-  function setSemanticBrowserWidth(width, persist=false) {
-    const available = semanticResults.getBoundingClientRect().width;
-    const maximum = Math.max(240, available - 227);
-    const next = Math.min(Math.max(240, width), maximum);
-    semanticResults.style.setProperty('--semantic-tree-width', `${next}px`);
-    semanticResizer.setAttribute('aria-valuenow', String(Math.round(next)));
-    semanticResizer.setAttribute('aria-valuemax', String(Math.round(maximum)));
-    if (persist) {
-      try { localStorage.setItem('lexnet-semantic-tree-width', String(Math.round(next))); }
-      catch (error) { /* Storage may be disabled; resizing still works. */ }
-    }
-  }
-
-  let savedSemanticWidth = 0;
-  try { savedSemanticWidth = Number(localStorage.getItem('lexnet-semantic-tree-width')); }
-  catch (error) { /* Use the CSS default. */ }
-  requestAnimationFrame(() => setSemanticBrowserWidth(
-    savedSemanticWidth > 0 ? savedSemanticWidth : semanticResults.getBoundingClientRect().width * .55,
-  ));
-
-  let resizeStartX = 0;
-  let resizeStartWidth = 0;
-  semanticResizer.addEventListener('pointerdown', event => {
-    resizeStartX = event.clientX;
-    resizeStartWidth = semanticBrowser.getBoundingClientRect().width;
-    semanticResizer.classList.add('dragging');
-    semanticResizer.setPointerCapture(event.pointerId);
-    event.preventDefault();
-  });
-  semanticResizer.addEventListener('pointermove', event => {
-    if (!semanticResizer.hasPointerCapture(event.pointerId)) return;
-    setSemanticBrowserWidth(resizeStartWidth + event.clientX - resizeStartX);
-  });
-  semanticResizer.addEventListener('pointerup', event => {
-    if (!semanticResizer.hasPointerCapture(event.pointerId)) return;
-    semanticResizer.releasePointerCapture(event.pointerId);
-    semanticResizer.classList.remove('dragging');
-    setSemanticBrowserWidth(semanticBrowser.getBoundingClientRect().width, true);
-  });
-  semanticResizer.addEventListener('keydown', event => {
-    if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight') return;
-    const direction = event.key === 'ArrowLeft' ? -1 : 1;
-    setSemanticBrowserWidth(
-      semanticBrowser.getBoundingClientRect().width + direction * (event.shiftKey ? 50 : 20),
-      true,
-    );
-    event.preventDefault();
-  });
-  window.addEventListener('resize', () => {
-    if (kind === 'semantic' && window.innerWidth > 850) {
-      setSemanticBrowserWidth(semanticBrowser.getBoundingClientRect().width);
-    }
   });
 
   const main = document.querySelector('main');
@@ -888,5 +863,5 @@ async function initialize() {
   });
 }
 document.querySelectorAll('.tab').forEach(x => x.addEventListener('click', () => selectTab(x.dataset.kind)));
-document.querySelectorAll('form').forEach(x => x.addEventListener('submit', search));
+document.querySelectorAll('form:not(#semantic-panel)').forEach(x => x.addEventListener('submit', search));
 renderHead(); initialize();

@@ -5,7 +5,10 @@ from io import BytesIO
 import pandas as pd
 
 from explorer import CSS_PATH, DAGRE_PATH, PAGE_PATH, SCRIPT_PATH, create_handler
-from explorer_queries import LexnetQueries, _example_segments, _propform_segments, split_query
+from explorer_queries import (
+    LexnetQueries, _example_segments, _propform_segments, _semantic_derivation_name,
+    split_query,
+)
 
 
 class TestLexnetQueries(unittest.TestCase):
@@ -36,7 +39,7 @@ class TestLexnetQueries(unittest.TestCase):
             'label_names': pd.DataFrame([
                 {
                     'semantic_label_id': 'sl1', 'name': 'Label One',
-                    'status': '1', 'derivation': '---', 'actant_type': '0',
+                    'status': '1', 'derivation': 'S1', 'actant_type': '0',
                     'comment': 'A label comment',
                 },
             ]).set_index('semantic_label_id'),
@@ -139,15 +142,34 @@ class TestLexnetQueries(unittest.TestCase):
         self.assertEqual([(item['name'], item['depth']) for item in hierarchy], [
             ('QQCH.', 0), ('ENTITÉ', 1),
         ])
+        self.assertTrue(all('labels' not in item for item in hierarchy))
         label_payload = self.queries.inspector_payload('semantic_label', 'sl1')
-        class_payload = self.queries.inspector_payload('semantic_class', 'c1')
-        self.assertIn('Derivation: ---', label_payload['description'])
+        class_payload = self.queries.inspector_payload('semantic_class', 'c0')
+        self.assertIn('Derivation: S1', label_payload['description'])
         self.assertEqual(label_payload['links'][0]['item_id'], 'c1')
+        self.assertEqual(label_payload['semantic_units']['count'], 1)
         self.assertIn('Inheritance: simple', class_payload['description'])
+        self.assertIn('DESCENDANT CLASSES', class_payload['description'])
+        self.assertIn(' • S_1: Label One', class_payload['description'])
+        self.assertNotIn('LEXICAL UNITS', class_payload['description'])
+        self.assertNotIn('semantic_units', class_payload)
+        label_link = next(link for link in class_payload['links'] if link['item_type'] == 'semantic_label')
+        self.assertEqual(label_link['function_name'], 'S_1')
         self.assertEqual(
             {link['item_type'] for link in class_payload['links']},
             {'semantic_class', 'semantic_label'},
         )
+        self.assertEqual(
+            self.queries.semantic_unit_results('semantic_class', 'c0')['node_id'].tolist(),
+            ['n1'],
+        )
+
+    def test_semantic_derivations_are_normalized_as_lf_names(self):
+        self.assertEqual(_semantic_derivation_name('S1'), 'S_1')
+        self.assertEqual(_semantic_derivation_name('A2Manif'), 'A_2Manif')
+        self.assertEqual(_semantic_derivation_name('Convij'), 'Conv_ij')
+        self.assertEqual(_semantic_derivation_name('V0Convij'), 'V_0Conv_ij')
+        self.assertEqual(_semantic_derivation_name('---'), '')
 
     def test_node_description_resolves_feature_names(self):
         description = self.queries.describe_node('n3')
@@ -328,7 +350,7 @@ class TestLexnetQueries(unittest.TestCase):
         self.assertIn('explorer.css', page)
         self.assertIn('explorer.js', page)
         self.assertIn('vendor/dagre.min.js', page)
-        self.assertIn('Semantic labels', page)
+        self.assertIn('Semantic hierarchy', page)
         self.assertIn('semantic-browser', page)
         self.assertIn('main-resizer', page)
         self.assertIn('inspector-back', page)
@@ -350,6 +372,7 @@ class TestLexnetQueries(unittest.TestCase):
         self.assertIn('copolysemy-graph', script)
         self.assertIn('inspectorHistoryLimit = 100', script)
         self.assertIn('inspectorHistoryMenu.replaceChildren()', script)
+        self.assertNotIn('semantic-unit-label', script)
         self.assertIn('example-occurrence', script)
         self.assertIn("atomicLfNames = ['De_nouveau']", script)
         self.assertIn("document.createElement(scriptMarker === '_' ? 'sub' : 'sup')", script)
@@ -396,6 +419,8 @@ class TestLexnetQueries(unittest.TestCase):
         node_payload = json.loads(node_body)
         _, _, entry_body = get('/api/inspect?type=entry&id=e1')
         entry_payload = json.loads(entry_body)
+        _, _, semantic_units_body = get('/api/semantic-units?type=semantic_label&id=sl1&limit=1')
+        semantic_units_payload = json.loads(semantic_units_body)
 
         self.assertIn('LexNet Explorer', page)
         self.assertIn(':root', stylesheet)
@@ -404,6 +429,7 @@ class TestLexnetQueries(unittest.TestCase):
         self.assertEqual(script_type, 'text/javascript')
         self.assertEqual(dagre_type, 'text/javascript')
         self.assertIn(b'graphlib', dagre_body)
+        self.assertNotIn('semantic_labels', meta_payload)
         self.assertEqual(meta_payload['semantic_hierarchy'][0]['count'], 1)
         self.assertTrue(meta_payload['semantic_hierarchy'][1]['semantic_field'])
         self.assertEqual({row['node_id'] for row in payload['rows']}, {'n1', 'n2'})
@@ -415,6 +441,8 @@ class TestLexnetQueries(unittest.TestCase):
         incoming = next(link for link in node_payload['links'] if link.get('direction') == 'Incoming')
         self.assertEqual(incoming['items'][0]['item_id'], 'n1')
         self.assertEqual(entry_payload['title'], 'Lexical entry')
+        self.assertEqual(semantic_units_payload['count'], 1)
+        self.assertEqual(semantic_units_payload['rows'][0]['node_id'], 'n1')
 
 
 if __name__ == '__main__':

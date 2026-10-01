@@ -48,6 +48,15 @@ def _number(value):
         return float('inf')
 
 
+def _semantic_derivation_name(value):
+    """Normalize the finite semantic-label derivation inventory as LF names."""
+    name = _text(value)
+    if not name or name == '---':
+        return ''
+    name = name.replace('Convij', 'Conv_ij')
+    return re.sub(r'(?<=[A-Za-z])(?=\d)', '_', name)
+
+
 def _name_text(label):
     """Return the searchable plain-text form of a structured lexical name."""
     text = label['name']
@@ -300,6 +309,7 @@ class LexnetQueries:
         )
         self.copolysemy_types = data.get('copolysemy_types', pd.DataFrame())
         self.copolysemy_subtypes = data.get('copolysemy_subtypes', pd.DataFrame())
+        self.semantic_unit_cache = {}
 
     @staticmethod
     def _name_map(frame):
@@ -502,15 +512,6 @@ class LexnetQueries:
             if class_id in ancestors or class_id not in self.label_classes.index:
                 return
             row = self.label_classes.loc[class_id]
-            direct_labels = sorted(
-                ({
-                    'id': _text(label_id),
-                    'name': self.label_names.get(label_id, _text(label_id)),
-                    'count': int(self.label_assignment_counts.get(label_id, 0)),
-                }
-                 for label_id in self.class_labels.get(class_id, [])),
-                key=lambda item: item['name'].casefold(),
-            )
             descendant_labels = self.semantic_label_ids_for_class(class_id, True)
             rows.append({
                 'id': _text(class_id),
@@ -518,9 +519,8 @@ class LexnetQueries:
                 'depth': depth,
                 'semantic_field': _text(row.get('semantic_field')) == '1',
                 'inheritance_type': _text(row.get('inheritance_type')),
-                'labels': direct_labels,
                 'count': int(sum(self.label_assignment_counts.get(item, 0) for item in descendant_labels)),
-                'has_children': bool(self.class_children.get(class_id) or direct_labels),
+                'has_children': bool(self.class_children.get(class_id)),
                 'multiple_paths': len(self.class_parents.get(class_id, [])) > 1,
             })
             next_ancestors = ancestors | {class_id}
@@ -549,6 +549,50 @@ class LexnetQueries:
         return {
             label_id for item in class_ids
             for label_id in self.class_labels.get(item, [])
+        }
+
+    def semantic_class_descendant_ids(self, class_id):
+        """Return every class below a semantic class, without duplicates."""
+        descendants = set()
+        pending = list(self.class_children.get(class_id, []))
+        while pending:
+            descendant_id = pending.pop()
+            if descendant_id in descendants or descendant_id == class_id:
+                continue
+            descendants.add(descendant_id)
+            pending.extend(self.class_children.get(descendant_id, []))
+        return descendants
+
+    def semantic_unit_results(self, item_type, item_id):
+        """Return lexical units below a semantic class or label."""
+        key = (item_type, item_id)
+        if key in self.semantic_unit_cache:
+            result = self.semantic_unit_cache.pop(key)
+            self.semantic_unit_cache[key] = result
+            return result
+        if item_type == 'semantic_class':
+            result = self.search_semantic_labels(class_id=item_id, include_descendants=True)
+        elif item_type == 'semantic_label':
+            result = self.search_semantic_labels(semantic_label_id=item_id)
+        else:
+            result = pd.DataFrame(columns=EMPTY_LABEL_RESULTS)
+        self.semantic_unit_cache[key] = result
+        if len(self.semantic_unit_cache) > 3:
+            self.semantic_unit_cache.pop(next(iter(self.semantic_unit_cache)))
+        return result
+
+    def semantic_unit_descriptor(self, item_type, item_id):
+        """Describe a lazily loaded semantic-unit result set."""
+        if item_type == 'semantic_class':
+            label_ids = self.semantic_label_ids_for_class(item_id, True)
+        elif item_type == 'semantic_label':
+            label_ids = {item_id}
+        else:
+            label_ids = set()
+        return {
+            'item_type': item_type,
+            'item_id': _text(item_id),
+            'count': int(sum(self.label_assignment_counts.get(label_id, 0) for label_id in label_ids)),
         }
 
     def search_semantic_labels(
@@ -866,7 +910,11 @@ class LexnetQueries:
         if class_links:
             lines.extend(['', 'CLASSIFICATION', *(link['line'] for link in class_links)])
             links.extend(class_links)
-        return {'title': 'Semantic label', 'description': '\n'.join(lines), 'links': links}
+        lines.extend(['', 'LEXICAL UNITS'])
+        return {
+            'title': 'Semantic label', 'description': '\n'.join(lines), 'links': links,
+            'semantic_units': self.semantic_unit_descriptor('semantic_label', semantic_label_id),
+        }
 
     def semantic_class_payload(self, class_id):
         """Return an inspector payload for one semantic class."""
@@ -887,10 +935,12 @@ class LexnetQueries:
             information.append(' • Comment: ' + re.sub(r'\s+', ' ', comment).strip())
         lines.extend(['', 'CLASS INFORMATION', *information])
 
+        descendant_classes = self.semantic_class_descendant_ids(class_id)
+        descendant_labels = self.semantic_label_ids_for_class(class_id, True)
         sections = [
             ('PARENTS', self.class_parents.get(class_id, []), 'semantic_class'),
-            ('SUBCLASSES', self.class_children.get(class_id, []), 'semantic_class'),
-            ('DIRECT LABELS', self.class_labels.get(class_id, []), 'semantic_label'),
+            ('DESCENDANT CLASSES', descendant_classes, 'semantic_class'),
+            ('SEMANTIC LABELS', descendant_labels, 'semantic_label'),
         ]
         for title, item_ids, item_type in sections:
             section_links = []
@@ -903,11 +953,21 @@ class LexnetQueries:
                     if item_type == 'semantic_label'
                     else _text(self.label_classes.loc[item_id].get('name'))
                 )
-                section_links.append(self._plain_link(item_name, item_type, item_id))
+                link = self._plain_link(item_name, item_type, item_id)
+                if item_type == 'semantic_label' and item_id in self.label_table.index:
+                    derivation = _semantic_derivation_name(
+                        self.label_table.loc[item_id].get('derivation')
+                    )
+                    if derivation:
+                        link['line'] = f' • {derivation}: {item_name}'
+                        link['function_name'] = derivation
+                section_links.append(link)
             if section_links:
                 lines.extend(['', title, *(link['line'] for link in section_links)])
                 links.extend(section_links)
-        return {'title': 'Semantic class', 'description': '\n'.join(lines), 'links': links}
+        return {
+            'title': 'Semantic class', 'description': '\n'.join(lines), 'links': links,
+        }
 
     @staticmethod
     def _confidence_link(text, value):
