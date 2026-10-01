@@ -35,8 +35,8 @@ def _records(frame, limit=2000):
     ]
 
 
-def create_server(queries, data_path, host='127.0.0.1', port=0):
-    """Create the local HTTP server without starting it."""
+def create_handler(queries, data_path):
+    """Create the Explorer request handler for a dataset."""
     class ExplorerHandler(BaseHTTPRequestHandler):
         def do_GET(self):
             request = urlparse(self.path)
@@ -146,7 +146,12 @@ def create_server(queries, data_path, host='127.0.0.1', port=0):
         def log_message(self, format, *args):
             return
 
-    return ThreadingHTTPServer((host, port), ExplorerHandler)
+    return ExplorerHandler
+
+
+def create_server(queries, data_path, host='127.0.0.1', port=0):
+    """Create the local HTTP server without starting it."""
+    return ThreadingHTTPServer((host, port), create_handler(queries, data_path))
 
 
 def launch(data_path, host='127.0.0.1', port=0, open_browser=True):

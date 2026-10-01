@@ -2,7 +2,41 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from loader import load_label_model, load_label_names, to_list
+from loader import load_copolysemy_model, load_label_model, load_label_names, to_list
+
+
+class TestCopolysemyModel(unittest.TestCase):
+    def test_loads_types_and_nested_subtypes(self):
+        with tempfile.TemporaryDirectory() as path:
+            file = Path(path) / 'copolysemy.xml'
+            file.write_text('''
+                <model>
+                  <type id="t1" name="First" order="2" semantics="1" derivation="1">
+                    <subtype id="s1" name="Specific" />
+                  </type>
+                  <type id="t2" name="Second" order="1" semantics="0" derivation="false" />
+                </model>
+            ''', encoding='utf8')
+            types, subtypes = load_copolysemy_model(file.name, path)
+
+        self.assertEqual(types['cp_type'].tolist(), ['t1', 't2'])
+        self.assertEqual(types['order'].tolist(), [2, 1])
+        self.assertEqual(types['semantics'].tolist(), [1, 0])
+        self.assertEqual(types['derivation'].tolist(), [True, False])
+        self.assertEqual(subtypes.iloc[0].to_dict(), {
+            'cp_subtype': 's1', 'cp_type': 't1', 'name': 'Specific',
+        })
+
+    def test_rejects_invalid_derivation_values(self):
+        with tempfile.TemporaryDirectory() as path:
+            file = Path(path) / 'copolysemy.xml'
+            file.write_text('''
+                <model>
+                  <type id="t1" name="First" order="1" semantics="2" derivation="yes" />
+                </model>
+            ''', encoding='utf8')
+            with self.assertRaisesRegex(ValueError, "'yes'"):
+                load_copolysemy_model(file.name, path)
 
 
 class TestLabelNames(unittest.TestCase):

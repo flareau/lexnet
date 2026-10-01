@@ -8,6 +8,7 @@ from loader import (
     DEFAULT_ENCODING,
     DEFAULT_SEPARATOR,
     load,
+    load_copolysemy_model,
     load_csv,
     load_feature_names,
     load_form_names,
@@ -20,6 +21,8 @@ from loader import (
     to_list,
 )
 from models import (
+    CopolysemySubtype,
+    CopolysemyType,
     Definition,
     Example,
     GrammaticalFeature,
@@ -37,6 +40,8 @@ __all__ = [
     'DEFAULT_DATA_SOURCES',
     'DEFAULT_ENCODING',
     'DEFAULT_SEPARATOR',
+    'CopolysemySubtype',
+    'CopolysemyType',
     'Definition',
     'Example',
     'GrammaticalFeature',
@@ -47,6 +52,7 @@ __all__ = [
     'PropositionalForm',
     'SemanticLabel',
     'load',
+    'load_copolysemy_model',
     'load_csv',
     'load_feature_names',
     'load_form_names',

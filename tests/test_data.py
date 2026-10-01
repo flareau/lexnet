@@ -15,6 +15,7 @@ class TestRealDataIntegration(unittest.TestCase):
     def test_core_tables_exist(self):
         required = {
             'nodes', 'entries', 'copolysemy', 'features', 'forms',
+            'copolysemy_types', 'copolysemy_subtypes',
             'labels', 'propforms', 'lfs', 'definitions',
             'feature_names', 'form_names', 'label_names', 'lf_names',
             'label_classes', 'label_class_edges', 'label_memberships',
@@ -31,6 +32,8 @@ class TestRealDataIntegration(unittest.TestCase):
         self.assertEqual(self.ln['examples'].index.name, 'example_id')
         self.assertEqual(self.ln['feature_names'].index.name, 'feature_id')
         self.assertEqual(self.ln['form_names'].index.name, 'wordform_feature_id')
+        self.assertEqual(self.ln['copolysemy_types'].index.name, 'cp_type')
+        self.assertEqual(self.ln['copolysemy_subtypes'].index.name, 'cp_subtype')
         self.assertEqual(self.ln['label_names'].index.name, 'semantic_label_id')
         self.assertEqual(self.ln['label_classes'].index.name, 'semantic_class_id')
         self.assertEqual(self.ln['lf_names'].index.name, 'lexical_function_id')
@@ -51,6 +54,7 @@ class TestRealDataIntegration(unittest.TestCase):
         tables = {
             'nodes', 'entries', 'features', 'labels', 'propforms',
             'definitions', 'examples', 'feature_names', 'form_names',
+            'copolysemy_types', 'copolysemy_subtypes',
             'label_names', 'label_classes', 'lf_names',
         }
         for table in tables:
@@ -72,6 +76,9 @@ class TestRealDataIntegration(unittest.TestCase):
             ('definitions.node_id', self.ln['definitions'].index, self.ln['nodes'].index),
             ('copolysemy.source_node_id', self.ln['copolysemy']['source_node_id'], self.ln['nodes'].index),
             ('copolysemy.target_node_id', self.ln['copolysemy']['target_node_id'], self.ln['nodes'].index),
+            ('copolysemy.cp_type', self.ln['copolysemy']['cp_type'], self.ln['copolysemy_types'].index),
+            ('copolysemy.cp_subtype', self.ln['copolysemy']['cp_subtype'].dropna(), self.ln['copolysemy_subtypes'].index),
+            ('copolysemy_subtypes.cp_type', self.ln['copolysemy_subtypes']['cp_type'], self.ln['copolysemy_types'].index),
             ('lfs.source_node_id', self.ln['lfs']['source_node_id'], self.ln['nodes'].index),
             ('lfs.target_node_id', self.ln['lfs']['target_node_id'], self.ln['nodes'].index),
             ('lfs.lexical_function_id', self.ln['lfs']['lexical_function_id'], self.ln['lf_names'].index),
@@ -81,6 +88,12 @@ class TestRealDataIntegration(unittest.TestCase):
         for relation, child_keys, parent_keys in relations:
             with self.subTest(relation=relation):
                 self.assertTrue(set(child_keys).issubset(set(parent_keys)))
+
+        typed_subtypes = self.ln['copolysemy'].dropna(subset=['cp_subtype'])
+        subtype_types = typed_subtypes['cp_subtype'].map(
+            self.ln['copolysemy_subtypes']['cp_type']
+        )
+        self.assertTrue(subtype_types.eq(typed_subtypes['cp_type']).all())
 
 
 if __name__ == '__main__':

@@ -21,6 +21,15 @@ class TestModels(unittest.TestCase):
                     {'entry_id': 'e2', 'entry_name': 'entry2', 'entry_status': 'ok'},
                 ]
             ).set_index('entry_id'),
+            'copolysemy': pd.DataFrame([
+                {'source_node_id': 'n1', 'target_node_id': 'n2', 'cp_type': 'ct1', 'cp_subtype': 'cs1'},
+            ]),
+            'copolysemy_types': pd.DataFrame([
+                {'cp_type': 'ct1', 'name': 'Metaphor', 'order': 1, 'semantics': 2, 'derivation': True},
+            ]).set_index('cp_type'),
+            'copolysemy_subtypes': pd.DataFrame([
+                {'cp_subtype': 'cs1', 'cp_type': 'ct1', 'name': 'Form'},
+            ]).set_index('cp_subtype'),
             'features': pd.DataFrame(
                 [
                     {'node_id': 'n1', 'usage': '', 'usagevars': '', 'POS': 'N', 'ph_str': '', 'embeddedlex': '', 'features': ['f1', 'f2'], 'featuresvars': ''},
@@ -108,6 +117,8 @@ class TestModels(unittest.TestCase):
         self.assertEqual(unit.features['features'], ['f1', 'f2'])
         self.assertEqual(unit.wordforms['signifier'].tolist(), ['alphas', 'alpha'])
         self.assertEqual(set(unit.examples.index), {'x1', 'x2'})
+        self.assertEqual(unit.outgoing_copolysemy['target_node_id'].tolist(), ['n2'])
+        self.assertTrue(unit.incoming_copolysemy.empty)
 
     def test_lexical_entry_selects_entry_and_senses(self):
         entry = models.LexicalEntry(entry_id='e1', ln=self.ln)
@@ -115,6 +126,20 @@ class TestModels(unittest.TestCase):
         self.assertEqual(entry.id, 'e1')
         self.assertEqual(entry.data['entry_name'], 'entry1')
         self.assertEqual(set(entry.senses.index.tolist()), {'n1', 'n2'})
+        self.assertEqual(entry.copolysemy['target_node_id'].tolist(), ['n2'])
+
+    def test_copolysemy_type_selects_metadata_and_subtypes(self):
+        cp_type = models.CopolysemyType(cp_type='ct1', ln=self.ln)
+
+        self.assertEqual(cp_type.id, 'ct1')
+        self.assertEqual(cp_type.data['name'], 'Metaphor')
+        self.assertEqual(cp_type.subtypes.index.tolist(), ['cs1'])
+
+    def test_copolysemy_subtype_selects_metadata(self):
+        subtype = models.CopolysemySubtype(cp_subtype='cs1', ln=self.ln)
+
+        self.assertEqual(subtype.id, 'cs1')
+        self.assertEqual(subtype.data['name'], 'Form')
 
     def test_grammatical_feature_selects_feature_name(self):
         feature = models.GrammaticalFeature(feature_id='gf2', ln=self.ln)

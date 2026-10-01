@@ -1,11 +1,10 @@
 import json
-import threading
 import unittest
-from urllib.request import urlopen
+from io import BytesIO
 
 import pandas as pd
 
-from explorer import CSS_PATH, PAGE_PATH, SCRIPT_PATH, create_server
+from explorer import CSS_PATH, PAGE_PATH, SCRIPT_PATH, create_handler
 from explorer_queries import LexnetQueries, _example_segments, _propform_segments, split_query
 
 
@@ -318,38 +317,47 @@ class TestLexnetQueries(unittest.TestCase):
         self.assertIn("atomicLfNames = ['De_nouveau']", script)
         self.assertIn("document.createElement(scriptMarker === '_' ? 'sub' : 'sup')", script)
 
-    def test_local_server_serves_page_and_search_api(self):
-        server = create_server(self.queries, '/tmp/example')
-        thread = threading.Thread(target=server.serve_forever)
-        thread.start()
-        base_url = f'http://127.0.0.1:{server.server_port}'
-        try:
-            with urlopen(base_url + '/') as response:
-                page = response.read().decode('utf-8')
-            with urlopen(base_url + '/explorer.css') as response:
-                stylesheet = response.read().decode('utf-8')
-                stylesheet_type = response.headers.get_content_type()
-            with urlopen(base_url + '/explorer.js') as response:
-                script = response.read().decode('utf-8')
-                script_type = response.headers.get_content_type()
-            with urlopen(base_url + '/api/meta') as response:
-                meta_payload = json.load(response)
-            with urlopen(base_url + '/api/search?kind=word&q=chat&mode=exact&forms=1') as response:
-                payload = json.load(response)
-            with urlopen(base_url + '/api/search?kind=lf&family_id=fam1') as response:
-                family_payload = json.load(response)
-            with urlopen(base_url + '/api/search?kind=lf&family_id=group%3A2') as response:
-                group_payload = json.load(response)
-            with urlopen(base_url + '/api/search?kind=semantic&class_id=c0&descendants=1') as response:
-                semantic_payload = json.load(response)
-            with urlopen(base_url + '/api/inspect?type=node&id=n3') as response:
-                node_payload = json.load(response)
-            with urlopen(base_url + '/api/inspect?type=entry&id=e1') as response:
-                entry_payload = json.load(response)
-        finally:
-            server.shutdown()
-            server.server_close()
-            thread.join()
+    def test_http_handler_serves_page_and_search_api(self):
+        handler_class = create_handler(self.queries, '/tmp/example')
+
+        def get(path):
+            handler = handler_class.__new__(handler_class)
+            handler.path = path
+            handler.command = 'GET'
+            handler.request_version = 'HTTP/1.1'
+            handler.requestline = f'GET {path} HTTP/1.1'
+            handler.wfile = BytesIO()
+            handler.do_GET()
+            headers, body = handler.wfile.getvalue().split(b'\r\n\r\n', 1)
+            header_lines = headers.decode('iso-8859-1').splitlines()
+            status = int(header_lines[0].split()[1])
+            content_type = next(
+                line.split(':', 1)[1].strip().split(';', 1)[0]
+                for line in header_lines if line.lower().startswith('content-type:')
+            )
+            self.assertEqual(status, 200)
+            return status, content_type, body
+
+        _, _, page_body = get('/')
+        page = page_body.decode('utf-8')
+        _, stylesheet_type, stylesheet_body = get('/explorer.css')
+        stylesheet = stylesheet_body.decode('utf-8')
+        _, script_type, script_body = get('/explorer.js')
+        script = script_body.decode('utf-8')
+        _, _, meta_body = get('/api/meta')
+        meta_payload = json.loads(meta_body)
+        _, _, search_body = get('/api/search?kind=word&q=chat&mode=exact&forms=1')
+        payload = json.loads(search_body)
+        _, _, family_body = get('/api/search?kind=lf&family_id=fam1')
+        family_payload = json.loads(family_body)
+        _, _, group_body = get('/api/search?kind=lf&family_id=group%3A2')
+        group_payload = json.loads(group_body)
+        _, _, semantic_body = get('/api/search?kind=semantic&class_id=c0&descendants=1')
+        semantic_payload = json.loads(semantic_body)
+        _, _, node_body = get('/api/inspect?type=node&id=n3')
+        node_payload = json.loads(node_body)
+        _, _, entry_body = get('/api/inspect?type=entry&id=e1')
+        entry_payload = json.loads(entry_body)
 
         self.assertIn('LexNet Explorer', page)
         self.assertIn(':root', stylesheet)

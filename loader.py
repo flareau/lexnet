@@ -215,6 +215,41 @@ def load_form_names(file, path, encoding=DEFAULT_ENCODING):
     return form_names
 
 
+def load_copolysemy_model(file, path, encoding=DEFAULT_ENCODING):
+    """Load copolysemy relation types and their subtypes."""
+    xml = load_xml(file=file, path=path, encoding=encoding)
+    types = []
+    subtypes = []
+
+    for tag in xml.findall('type'):
+        cp_type = tag.get('id')
+        derivation = tag.get('derivation')
+        if derivation not in {'0', '1', 'false', 'true'}:
+            raise ValueError(f'Invalid copolysemy derivation value: {derivation!r}')
+        types.append({
+            'cp_type': cp_type,
+            'name': tag.get('name'),
+            'order': int(tag.get('order')),
+            'semantics': int(tag.get('semantics')),
+            'derivation': derivation in {'1', 'true'},
+        })
+        subtypes.extend({
+            'cp_subtype': subtype.get('id'),
+            'cp_type': cp_type,
+            'name': subtype.get('name'),
+        } for subtype in tag.findall('subtype'))
+
+    copolysemy_types = pd.DataFrame(types, columns=[
+        'cp_type', 'name', 'order', 'semantics', 'derivation',
+    ])
+    copolysemy_subtypes = pd.DataFrame(subtypes, columns=[
+        'cp_subtype', 'cp_type', 'name',
+    ])
+    print_imported(copolysemy_types, file, items='copolysemy types')
+    print_imported(copolysemy_subtypes, file, items='copolysemy subtypes')
+    return copolysemy_types, copolysemy_subtypes
+
+
 def load_label_model(file, path, encoding=DEFAULT_ENCODING):
     """Load semantic-label instances and their polyhierarchical class model."""
     xml = load_xml(file=file, path=path, encoding=encoding)
@@ -377,6 +412,11 @@ def load(path, sources=None, columns=None, separator=DEFAULT_SEPARATOR, encoding
     ln['feature_names'].set_index('feature_id', inplace=True)
     ln['form_names'] = load_form_names(file=sources['form_names'], path=path, encoding=encoding)
     ln['form_names'].set_index('wordform_feature_id', inplace=True)
+    ln['copolysemy_types'], ln['copolysemy_subtypes'] = load_copolysemy_model(
+        file=sources['copolysemy_names'], path=path, encoding=encoding
+    )
+    ln['copolysemy_types'].set_index('cp_type', inplace=True)
+    ln['copolysemy_subtypes'].set_index('cp_subtype', inplace=True)
     (
         ln['label_names'], ln['label_classes'],
         ln['label_class_edges'], ln['label_memberships'],

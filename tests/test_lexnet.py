@@ -6,7 +6,8 @@ import lexnet
 class TestPublicApi(unittest.TestCase):
     def test_domain_models_are_public(self):
         expected = {
-            'Definition', 'Example', 'GrammaticalFeature', 'LexicalEntry',
+            'CopolysemySubtype', 'CopolysemyType', 'Definition', 'Example',
+            'GrammaticalFeature', 'LexicalEntry',
             'LexicalFunction', 'LexicalNetwork', 'LexicalUnit',
             'PropositionalForm', 'SemanticLabel',
         }

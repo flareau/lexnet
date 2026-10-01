@@ -27,6 +27,12 @@ class LexicalUnit:
         self.wordforms = ln['forms'][ln['forms'].index == node_id]
         example_ids = ln['ex-rel'].loc[ln['ex-rel'].node_id == node_id, 'example_id']
         self.examples = ln['examples'].loc[example_ids.tolist()]
+        self.outgoing_copolysemy = ln['copolysemy'][
+            ln['copolysemy'].source_node_id == node_id
+        ]
+        self.incoming_copolysemy = ln['copolysemy'][
+            ln['copolysemy'].target_node_id == node_id
+        ]
 
 
 class LexicalEntry:
@@ -37,6 +43,31 @@ class LexicalEntry:
         self.ln = ln
         self.data = ln['entries'].loc[entry_id]
         self.senses = ln['nodes'][ln['nodes'].entry_id == entry_id]
+        self.copolysemy = ln['copolysemy'][
+            ln['copolysemy'].source_node_id.isin(self.senses.index)
+            | ln['copolysemy'].target_node_id.isin(self.senses.index)
+        ]
+
+
+class CopolysemyType:
+    """A type of copolysemy relation."""
+
+    def __init__(self, cp_type, ln):
+        self.id = cp_type
+        self.ln = ln
+        self.data = ln['copolysemy_types'].loc[cp_type]
+        self.subtypes = ln['copolysemy_subtypes'][
+            ln['copolysemy_subtypes'].cp_type == cp_type
+        ]
+
+
+class CopolysemySubtype:
+    """A subtype of copolysemy relation."""
+
+    def __init__(self, cp_subtype, ln):
+        self.id = cp_subtype
+        self.ln = ln
+        self.data = ln['copolysemy_subtypes'].loc[cp_subtype]
 
 
 class GrammaticalFeature:
